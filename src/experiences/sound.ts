@@ -1,340 +1,225 @@
 import './sound.css';
+import { Dial } from '../dial';
+import { MusicDisplay } from './sound/display';
+import { KEYS, PITCH_NAMES, STEP, MusicEngine, arrange, renderMelody, type Note } from './sound/music';
 
-type Note = { key: number; time: number };
-const letters = ['H', 'I', 'K', 'A', 'R', 'U'];
-const frequencies = [196, 220, 261.6256, 293.6648, 329.6276, 392];
-const colors = ['#ff845e', '#ffe17e', '#91c7a8', '#b99adc', '#ff845e', '#b8d6da'];
-
-function synth(context: BaseAudioContext, destination: AudioNode, key: number, start: number): OscillatorNode[] {
-  const voices: OscillatorNode[] = [];
-  const duration = key === 3 ? 1.15 : key === 5 ? 1.5 : .72;
-  const harmonic = key === 1 || key === 5;
-  for (let layer = 0; layer < (harmonic ? 2 : 1); layer++) {
-    const oscillator = context.createOscillator();
-    const envelope = context.createGain();
-    const filter = context.createBiquadFilter();
-    oscillator.type = key === 2 || key === 4 ? 'triangle' : 'sine';
-    oscillator.frequency.value = frequencies[key] * (layer ? 2 : 1);
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(1100 + key * 220, start);
-    filter.frequency.exponentialRampToValueAtTime(450, start + duration);
-    const volume = layer ? .055 : .24;
-    envelope.gain.setValueAtTime(0, start);
-    envelope.gain.linearRampToValueAtTime(volume, start + .008);
-    envelope.gain.exponentialRampToValueAtTime(.0001, start + duration);
-    oscillator.connect(filter);
-    filter.connect(envelope);
-    envelope.connect(destination);
-    oscillator.start(start);
-    oscillator.stop(start + duration + .05);
-    oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); filter.disconnect(); };
-    voices.push(oscillator);
-  }
-  return voices;
-}
-
-function encodeWav(buffer: AudioBuffer): Blob {
-  const samples = buffer.getChannelData(0);
-  const bytes = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(bytes);
-  const write = (offset: number, value: string) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
-  write(0, 'RIFF');
-  view.setUint32(4, 36 + samples.length * 2, true);
-  write(8, 'WAVE');
-  write(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, buffer.sampleRate, true);
-  view.setUint32(28, buffer.sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  write(36, 'data');
-  view.setUint32(40, samples.length * 2, true);
-  samples.forEach((sample, index) => {
-    const value = Math.max(-1, Math.min(1, sample));
-    view.setInt16(44 + index * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
-  });
-  return new Blob([bytes], { type: 'audio/wav' });
-}
+const icons = {
+  speaker: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m11 4-6 4H2v8h3l6 4V4Z"/><g class="music-speaker-on"><path d="M15 8a6 6 0 0 1 0 8M18 4a11 11 0 0 1 0 16"/></g><path class="music-speaker-off" d="m16 9 6 6m0-6-6 6"/></svg>',
+  loop: '<svg viewBox="0 0 48 32" fill="none" aria-hidden="true"><path d="M5 17A11 11 0 0 1 16 6h22m-5-4 5 4-5 4M43 15a11 11 0 0 1-11 11H10m5 4-5-4 5-4"/><path class="music-play-icon" d="m21 11 9 5-9 5Z"/><path class="music-stop-icon" d="M20 11h10v10H20Z"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg>',
+  reset: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 9A8 8 0 1 0 20 16M20 3v6h-6"/></svg>'
+};
 
 export function mountSound(root: HTMLElement): () => void {
-  root.innerHTML = `<section class="sound-instrument" aria-label="Hikaru music instrument">
-    <div class="sound-visual"><canvas aria-hidden="true"></canvas><div class="sound-birthday" hidden>Happy birthday,<br>Hikaru.</div></div>
-    <div class="sound-keys" role="group" aria-label="Musical keys">${letters.map((letter, index) => `<button class="sound-key" type="button" data-note="${index}" aria-label="Play ${letter}" aria-keyshortcuts="${letter}" style="--key-color:${colors[index]}">${letter}</button>`).join('')}</div>
-    <div class="sound-controls">
-      <button class="sound-control sound-loop" type="button" aria-label="Loop your melody" aria-pressed="false" disabled><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M3 18A15 15 0 0 1 30.6 9.8M30.8 5v5.3h-5.4M33 18A15 15 0 0 1 5.4 26.2M5.2 31v-5.3h5.4"/><path class="sound-play" d="m15 12 9 6-9 6Z"/><path class="sound-stop" d="M14 14h8v8h-8Z"/></svg></button>
-      <button class="sound-control sound-download" type="button" aria-label="Download melody as WAV" disabled><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><path d="M18 10v12m-4-4 4 4 4-4M11 23v3h14v-3"/></svg></button>
-      <button class="sound-control sound-reset" type="button" aria-label="Clear melody" disabled><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><path d="M24 15a7 7 0 1 0 0 7M24 11v5h-5"/></svg></button>
-    </div>
-    <div class="sound-status" role="status" aria-live="polite"></div>
+  root.innerHTML = `<section class="music-device" aria-label="Hikaru pentatonic instrument">
+    <div class="music-machine">
+      <div class="music-faceplate" aria-hidden="true"></div>
+      <i class="music-screw music-screw-tl" aria-hidden="true"></i><i class="music-screw music-screw-tr" aria-hidden="true"></i><i class="music-screw music-screw-bl" aria-hidden="true"></i><i class="music-screw music-screw-br" aria-hidden="true"></i>
+      <header class="music-header"><h1>HIKARU</h1><button type="button" class="music-mute music-dark-key" aria-label="Mute sound" aria-pressed="false">${icons.speaker}</button></header>
+      <div class="music-screen"><canvas aria-hidden="true"></canvas><div class="music-sequence" aria-hidden="true">${Array.from({ length: 16 }, () => '<span></span>').join('')}</div><div class="music-birthday" hidden>Happy birthday,<br>Hikaru.</div><div class="music-glass" aria-hidden="true"></div></div>
+      <div class="music-keys" role="group" aria-label="D major pentatonic scale">${KEYS.map((letter, key) => `<button type="button" class="music-key" data-note="${key}" aria-label="Play ${letter}, ${PITCH_NAMES[key]}" aria-keyshortcuts="${letter}"><span>${letter}</span></button>`).join('')}</div>
+      <div class="music-tone-group"><svg class="music-ticks" viewBox="0 0 160 100" fill="none" aria-hidden="true">${Array.from({ length: 11 }, (_, index) => {
+        const angle = (-65 + index * 13) * Math.PI / 180;
+        const r = index % 5 === 0 ? 76 : 73;
+        return `<path d="M${80 + Math.sin(angle) * (r - (index % 5 === 0 ? 12 : 8))} ${91 - Math.cos(angle) * (r - (index % 5 === 0 ? 12 : 8))} L${80 + Math.sin(angle) * r} ${91 - Math.cos(angle) * r}"/>`;
+      }).join('')}</svg><div class="music-tone" role="slider" tabindex="0" aria-label="Tone" aria-valuemin="0" aria-valuemax="100" aria-valuenow="46" aria-orientation="vertical"><div class="music-knurl"><div class="music-knob-cap"><span></span></div></div></div><span class="music-tone-label">TONE</span></div>
+      <div class="music-controls"><button type="button" class="music-loop" aria-label="Loop your melody" aria-pressed="false" disabled>${icons.loop}<span>LOOP</span></button><button type="button" class="music-download music-dark-key" aria-label="Download melody as WAV" disabled>${icons.download}</button><button type="button" class="music-reset music-dark-key" aria-label="Clear melody" disabled>${icons.reset}</button></div>
+    </div><div class="music-status" role="status" aria-live="polite"></div>
   </section>`;
-  const canvas = root.querySelector<HTMLCanvasElement>('canvas')!;
-  const drawing = canvas.getContext('2d')!;
-  const buttons = [...root.querySelectorAll<HTMLButtonElement>('.sound-key')];
-  const loopButton = root.querySelector<HTMLButtonElement>('.sound-loop')!;
-  const downloadButton = root.querySelector<HTMLButtonElement>('.sound-download')!;
-  const resetButton = root.querySelector<HTMLButtonElement>('.sound-reset')!;
-  const birthday = root.querySelector<HTMLElement>('.sound-birthday')!;
-  const status = root.querySelector<HTMLElement>('.sound-status')!;
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  const energies = Array.from({ length: 6 }, () => 0);
-  const keyTimers: number[] = [];
-  const loopTimers = new Set<number>();
-  const voices = new Set<OscillatorNode>();
-  let context: AudioContext | null = null;
-  let master: GainNode | null = null;
+  const find = <T extends HTMLElement>(selector: string) => root.querySelector<T>(selector)!;
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>('.music-key')];
+  const loopButton = find<HTMLButtonElement>('.music-loop');
+  const saveButton = find<HTMLButtonElement>('.music-download');
+  const resetButton = find<HTMLButtonElement>('.music-reset');
+  const muteButton = find<HTMLButtonElement>('.music-mute');
+  const birthday = find('.music-birthday');
+  const screen = find('.music-screen');
+  const status = find('.music-status');
+  const cells = [...root.querySelectorAll<HTMLElement>('.music-sequence span')];
+  const keys = find('.music-keys');
+  const engine = new MusicEngine();
+  const display = new MusicDisplay(find<HTMLCanvasElement>('canvas'));
+  const dial = new Dial(find('.music-tone'), value => engine.setTone(value), 46, value => `${value}% brightness`);
   let notes: Note[] = [];
+  let phrase = arrange(notes);
   let recent = '';
+  let success = false;
+  let muted = false;
   let looping = false;
   let disposed = false;
-  let success = false;
-  let frame = 0;
-  let previous = 0;
-  let position = 0;
+  let generation = 0;
+  let transport = 0;
+  let nextStep = 0;
+  let origin = 0;
+  let lastInput = -1;
   let birthdayTimer = 0;
   let exportUrl: string | null = null;
+  const lastKey = Array.from({ length: 6 }, () => -1);
+  const keyTimers: number[] = [];
+  const timers = new Set<number>();
+  const pointers = new Map<number, number>();
 
-  const draw = () => {
-    const width = canvas.width;
-    const height = canvas.height;
-    drawing.clearRect(0, 0, width, height);
-    drawing.save();
-    drawing.scale(width / 1000, height / 500);
-    const drift = reduced.matches ? 0 : Math.sin(position * .3) * 2;
-    drawing.strokeStyle = colors[0];
-    drawing.lineWidth = 5.5 + energies[0] * 3;
-    drawing.beginPath();
-    drawing.ellipse(370, 242 + drift, 230 + energies[0] * 24, 230 - energies[0] * 8, 0, 0, Math.PI * 2);
-    drawing.stroke();
-    drawing.save();
-    drawing.translate(760, 300 + drift * 1.2);
-    drawing.scale(1 + energies[3] * .24, 1 - energies[3] * .08);
-    drawing.fillStyle = colors[3];
-    drawing.beginPath();
-    drawing.arc(0, 0, 106, 0, Math.PI * 2);
-    drawing.fill();
-    drawing.restore();
-    drawing.save();
-    drawing.translate(535, 190);
-    drawing.rotate(energies[2] * Math.PI * .45);
-    const side = 46 + energies[2] * 14;
-    drawing.fillStyle = colors[2];
-    drawing.fillRect(-side / 2, -side / 2, side, side);
-    drawing.restore();
-    drawing.fillStyle = colors[4];
-    drawing.beginPath();
-    const capsuleWidth = 103 + energies[4] * 65;
-    drawing.roundRect(421 - capsuleWidth / 2, 360 - energies[4] * 24, capsuleWidth, 28, 14);
-    drawing.fill();
-    drawing.strokeStyle = colors[1];
-    drawing.lineWidth = 2.3;
-    for (let index = 0; index < 3; index++) {
-      const wave = energies[1] * Math.sin(position * 9 + index) * 45;
-      drawing.beginPath();
-      drawing.moveTo(4, 237 + index * 85);
-      drawing.bezierCurveTo(330, -50 + index * 72 + wave, 630, 600 - index * 35 - wave, 996, 130 + index * 85);
-      drawing.stroke();
-    }
-    if (energies[5] > .02) {
-      drawing.strokeStyle = colors[5];
-      drawing.lineWidth = 1.2;
-      for (let index = 0; index < 3; index++) {
-        drawing.globalAlpha = energies[5] * (.55 - index * .12);
-        drawing.beginPath();
-        drawing.arc(760, 300, 112 + (1 - energies[5]) * 100 + index * 25, 0, Math.PI * 2);
-        drawing.stroke();
-      }
-    }
-    drawing.restore();
-  };
-
-  const resize = () => {
-    const bounds = canvas.getBoundingClientRect();
-    const ratio = Math.min(devicePixelRatio || 1, 2);
-    canvas.width = Math.round(bounds.width * ratio);
-    canvas.height = Math.round(bounds.height * ratio);
-    draw();
-  };
-  const observer = new ResizeObserver(resize);
-  observer.observe(canvas);
-  const animate = (time: number) => {
-    const delta = Math.min((time - previous) / 1000 || 0, .05);
-    previous = time;
-    position += delta;
-    energies.forEach((value, index) => { energies[index] = value * Math.exp(-delta * 3); });
-    if (!reduced.matches) draw();
-    frame = requestAnimationFrame(animate);
-  };
-
-  const visualNote = (key: number) => {
-    energies[key] = 1;
+  function pattern(step = 0, playing = false): void {
+    const page = Math.floor(step / 16) * 16;
+    const filled = new Set(phrase.notes.filter(note => note.step >= page && note.step < page + 16).map(note => note.step % 16));
+    cells.forEach((cell, index) => {
+      cell.classList.toggle('is-filled', filled.has(index));
+      cell.classList.toggle('is-current', playing && index === step % 16);
+    });
+  }
+  function flash(key: number): void {
+    display.pulse(key);
     buttons[key].classList.add('is-down');
     clearTimeout(keyTimers[key]);
-    keyTimers[key] = window.setTimeout(() => buttons[key].classList.remove('is-down'), 170);
-    if (reduced.matches) draw();
-  };
-
-  const unlockAudio = async () => {
-    if (!context) {
-      context = new AudioContext();
-      master = context.createGain();
-      master.gain.value = .7;
-      master.connect(context.destination);
-    }
-    if (context.state === 'suspended') await context.resume();
-    return context;
-  };
-
-  const soundNote = (key: number, when = 0) => {
-    if (!context || !master || disposed) return;
-    synth(context, master, key, context.currentTime + when).forEach(oscillator => {
-      voices.add(oscillator);
-      oscillator.addEventListener('ended', () => voices.delete(oscillator));
-    });
-  };
-
-  const stopLoop = () => {
+    keyTimers[key] = window.setTimeout(() => buttons[key].classList.remove('is-down'), 135);
+  }
+  function stopLoop(): void {
+    generation++;
     looping = false;
-    loopTimers.forEach(timer => clearTimeout(timer));
-    loopTimers.clear();
-    voices.forEach(voice => { try { voice.stop(); } catch { /* already ended */ } });
-    voices.clear();
+    clearInterval(transport);
+    timers.forEach(timer => clearTimeout(timer));
+    timers.clear();
+    engine.stop();
     loopButton.setAttribute('aria-pressed', 'false');
     loopButton.setAttribute('aria-label', 'Loop your melody');
-  };
-
-  const playKey = (key: number) => {
+    pattern();
+  }
+  function play(key: number): void {
     if (disposed) return;
+    const now = performance.now() / 1000;
+    if (now - lastKey[key] < .065) return;
+    lastKey[key] = now;
     if (looping) stopLoop();
-    visualNote(key);
-    const now = performance.now();
-    notes = notes.filter(note => now - note.time <= 30_000).slice(-63);
-    notes.push({ key, time: now });
-    loopButton.disabled = downloadButton.disabled = resetButton.disabled = false;
-    recent = (recent + letters[key]).slice(-6);
+    const velocity = now - lastInput < .09 ? .58 : .85;
+    lastInput = now;
+    notes = notes.filter(note => now - note.time < 20).slice(-63);
+    notes.push({ key, time: now, velocity });
+    phrase = arrange(notes);
+    pattern(phrase.notes[phrase.notes.length - 1].step);
+    flash(key);
+    loopButton.disabled = saveButton.disabled = resetButton.disabled = false;
+    const token = generation;
+    void engine.ready().then(() => {
+      if (!disposed && !document.hidden && token === generation) engine.play(key, engine.now + .008, velocity, true);
+    }).catch(() => { status.textContent = 'Audio is unavailable in this browser.'; });
+    recent = (recent + KEYS[key]).slice(-6);
     if (recent === 'HIKARU' && !success) {
       success = true;
-      birthdayTimer = window.setTimeout(() => {
-        birthday.hidden = false;
-        requestAnimationFrame(() => birthday.classList.add('is-revealed'));
-        status.textContent = 'Happy birthday, Hikaru.';
-      }, reduced.matches ? 0 : 350);
+      birthday.hidden = false;
+      screen.classList.add('has-birthday');
+      status.textContent = 'Happy birthday, Hikaru.';
+      birthdayTimer = window.setTimeout(() => { birthday.hidden = true; screen.classList.remove('has-birthday'); }, 4500);
     }
-    void unlockAudio().then(() => soundNote(key)).catch(() => { status.textContent = 'Audio is unavailable in this browser.'; });
-  };
-
-  buttons.forEach((button, index) => button.addEventListener('click', () => playKey(index)));
-
+  }
+  buttons.forEach((button, key) => {
+    button.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      button.focus({ preventScroll: true });
+      pointers.set(event.pointerId, key);
+      keys.setPointerCapture(event.pointerId);
+      play(key);
+    });
+    button.addEventListener('click', event => { if (event.detail === 0) play(key); });
+  });
+  keys.addEventListener('pointermove', event => {
+    if (!pointers.has(event.pointerId)) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLButtonElement>('.music-key');
+    if (!target) return;
+    const key = Number(target.dataset.note);
+    if (pointers.get(event.pointerId) !== key) { pointers.set(event.pointerId, key); play(key); }
+  });
+  const release = (event: PointerEvent) => pointers.delete(event.pointerId);
+  keys.addEventListener('pointerup', release);
+  keys.addEventListener('pointercancel', release);
+  keys.addEventListener('lostpointercapture', release);
   const keyboard = (event: KeyboardEvent) => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], .experience-nav')) return;
-    const key = letters.indexOf(event.key.toUpperCase());
-    if (key < 0) return;
-    event.preventDefault();
-    playKey(key);
+    const key = KEYS.indexOf(event.key.toUpperCase() as typeof KEYS[number]);
+    if (key >= 0) { event.preventDefault(); play(key); }
   };
-
-  const schedule = (callback: () => void, delay: number) => {
-    const timer = window.setTimeout(() => { loopTimers.delete(timer); callback(); }, delay);
-    loopTimers.add(timer);
-  };
-
-  const loop = () => {
-    if (!looping || !notes.length || document.hidden) return;
-    const captured = notes.map(note => ({ ...note }));
-    const first = captured[0].time;
-    const duration = Math.max(900, captured[captured.length - 1].time - first + 800);
-    captured.forEach(note => {
-      const delay = note.time - first;
-      soundNote(note.key, delay / 1000);
-      schedule(() => visualNote(note.key), delay);
-    });
-    schedule(loop, duration);
-  };
-
+  function pump(): void {
+    if (!looping) return;
+    while (origin + nextStep * STEP < engine.now + .12) {
+      const step = nextStep % phrase.steps;
+      const when = origin + nextStep * STEP;
+      if (step % 16 === 0) engine.bed(when);
+      const played = phrase.notes.filter(note => note.step === step);
+      played.forEach(note => engine.play(note.key, when, note.velocity));
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        if (!looping) return;
+        pattern(step, true);
+        played.forEach(note => flash(note.key));
+      }, Math.max(0, (when - engine.now) * 1000));
+      timers.add(timer);
+      nextStep++;
+    }
+  }
   loopButton.addEventListener('click', () => {
     if (looping) { stopLoop(); return; }
     if (!notes.length) return;
+    generation++;
+    engine.stop();
     looping = true;
     loopButton.setAttribute('aria-pressed', 'true');
     loopButton.setAttribute('aria-label', 'Stop melody loop');
-    void unlockAudio().then(() => { if (looping) loop(); }).catch(() => { stopLoop(); status.textContent = 'Audio is unavailable in this browser.'; });
+    const token = generation;
+    void engine.ready().then(() => {
+      if (!looping || disposed || token !== generation) return;
+      phrase = arrange(notes);
+      origin = engine.now + .035;
+      nextStep = 0;
+      pump();
+      transport = window.setInterval(pump, 25);
+    }).catch(() => { stopLoop(); status.textContent = 'Audio is unavailable in this browser.'; });
   });
-
+  muteButton.addEventListener('click', () => {
+    muted = !muted;
+    engine.setMuted(muted);
+    muteButton.setAttribute('aria-pressed', String(muted));
+    muteButton.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound');
+  });
   resetButton.addEventListener('click', () => {
-    stopLoop();
-    notes = [];
-    recent = '';
-    success = false;
+    stopLoop(); notes = []; phrase = arrange(notes); recent = ''; success = false;
     clearTimeout(birthdayTimer);
     birthday.hidden = true;
-    birthday.classList.remove('is-revealed');
+    screen.classList.remove('has-birthday');
+    loopButton.disabled = saveButton.disabled = resetButton.disabled = true;
     status.textContent = '';
-    loopButton.disabled = downloadButton.disabled = resetButton.disabled = true;
-    energies.fill(0);
-    draw();
+    display.clear(); pattern();
   });
-
-  downloadButton.addEventListener('click', async () => {
+  saveButton.addEventListener('click', async () => {
     if (!notes.length) return;
-    downloadButton.disabled = true;
-    downloadButton.setAttribute('aria-busy', 'true');
-    const captured = notes.map(note => ({ ...note }));
+    saveButton.disabled = true;
+    saveButton.setAttribute('aria-busy', 'true');
+    const captured = arrange(notes);
     try {
-      const first = captured[0].time;
-      const duration = (captured[captured.length - 1].time - first) / 1000 + 1.6;
-      const offline = new OfflineAudioContext(1, Math.ceil(44100 * duration), 44100);
-      const gain = offline.createGain();
-      gain.gain.value = .7;
-      gain.connect(offline.destination);
-      captured.forEach(note => synth(offline, gain, note.key, (note.time - first) / 1000));
-      const rendered = await offline.startRendering();
+      const blob = await renderMelody(captured, dial.current);
       if (disposed) return;
       if (exportUrl) URL.revokeObjectURL(exportUrl);
-      exportUrl = URL.createObjectURL(encodeWav(rendered));
+      exportUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = exportUrl;
-      link.download = 'hikaru.wav';
-      document.body.append(link);
-      link.click();
-      link.remove();
-    } catch {
-      status.textContent = 'Could not save the melody. Please try again.';
-    } finally {
-      downloadButton.disabled = !notes.length;
-      downloadButton.removeAttribute('aria-busy');
-    }
+      link.href = exportUrl; link.download = 'hikaru-pentatonic.wav';
+      document.body.append(link); link.click(); link.remove();
+    } catch { status.textContent = 'Could not save. Please try again.'; }
+    finally { saveButton.disabled = !notes.length; saveButton.removeAttribute('aria-busy'); }
   });
-
-  const pause = () => {
-    stopLoop();
-    cancelAnimationFrame(frame);
-    void context?.suspend();
-  };
-  const visibility = () => {
-    if (document.hidden) pause();
-    else { previous = performance.now(); frame = requestAnimationFrame(animate); }
-  };
-  const motion = () => draw();
+  const pause = () => { stopLoop(); display.pause(); void engine.pause(); };
+  const visibility = () => { if (document.hidden) pause(); else display.resume(); };
+  const pageShow = () => display.resume();
   document.addEventListener('keydown', keyboard);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', pause);
-  reduced.addEventListener('change', motion);
-  resize();
-  frame = requestAnimationFrame(animate);
-
+  window.addEventListener('pageshow', pageShow);
+  pattern();
   return () => {
-    disposed = true;
-    pause();
-    clearTimeout(birthdayTimer);
-    keyTimers.forEach(timer => clearTimeout(timer));
-    observer.disconnect();
+    disposed = true; pause(); display.destroy();
+    clearTimeout(birthdayTimer); keyTimers.forEach(timer => clearTimeout(timer));
     document.removeEventListener('keydown', keyboard);
     document.removeEventListener('visibilitychange', visibility);
-    window.removeEventListener('pagehide', pause);
-    reduced.removeEventListener('change', motion);
+    window.removeEventListener('pagehide', pause); window.removeEventListener('pageshow', pageShow);
     if (exportUrl) URL.revokeObjectURL(exportUrl);
-    void context?.close();
-    root.replaceChildren();
+    void engine.dispose();
   };
 }

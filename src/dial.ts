@@ -5,14 +5,14 @@ export class Dial {
   private startX = 0;
   private startValue = 64;
 
-  constructor(private element: HTMLElement, private onChange: (value: number) => void) {
+  constructor(private element: HTMLElement, private onChange: (value: number) => void, initial = 64, private describe = (value: number) => `${100 - value}% comfy, ${value}% chaos`) {
     element.addEventListener('pointerdown', this.down);
     element.addEventListener('pointermove', this.move);
     element.addEventListener('pointerup', this.up);
     element.addEventListener('pointercancel', this.cancel);
     element.addEventListener('lostpointercapture', this.cancel);
     element.addEventListener('keydown', this.key);
-    this.set(64);
+    this.set(initial);
   }
 
   get current(): number { return this.value / 100; }
@@ -21,7 +21,7 @@ export class Dial {
     this.value = Math.max(0, Math.min(100, Math.round(value)));
     this.element.style.setProperty('--angle', `${-125 + this.value * 2.5}deg`);
     this.element.setAttribute('aria-valuenow', String(this.value));
-    this.element.setAttribute('aria-valuetext', `${100 - this.value}% comfy, ${this.value}% chaos`);
+    this.element.setAttribute('aria-valuetext', this.describe(this.value));
     this.onChange(this.value / 100);
   }
 
