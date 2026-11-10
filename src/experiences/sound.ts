@@ -1,6 +1,5 @@
 import './sound.css';
-import { Dial } from '../dial';
-import { MusicDisplay } from './sound/display';
+import { MusicDisplay, NOTE_COLORS } from './sound/display';
 import { KEYS, PITCH_NAMES, STEP, MusicEngine, arrange, renderMelody, type Note } from './sound/music';
 
 const icons = {
@@ -11,18 +10,11 @@ const icons = {
 };
 
 export function mountSound(root: HTMLElement): () => void {
-  root.innerHTML = `<section class="music-device" aria-label="Hikaru pentatonic instrument">
+  root.innerHTML = `<section class="music-device" aria-label="Hikaru pentatonic drum pad">
+    <div class="music-art"><canvas aria-hidden="true"></canvas><h1 class="music-birthday">Happy birthday,<br>Hikaru.</h1></div>
     <div class="music-machine">
-      <div class="music-faceplate" aria-hidden="true"></div>
-      <i class="music-screw music-screw-tl" aria-hidden="true"></i><i class="music-screw music-screw-tr" aria-hidden="true"></i><i class="music-screw music-screw-bl" aria-hidden="true"></i><i class="music-screw music-screw-br" aria-hidden="true"></i>
-      <header class="music-header"><h1>HIKARU</h1><button type="button" class="music-mute music-dark-key" aria-label="Mute sound" aria-pressed="false">${icons.speaker}</button></header>
-      <div class="music-screen"><canvas aria-hidden="true"></canvas><div class="music-sequence" aria-hidden="true">${Array.from({ length: 16 }, () => '<span></span>').join('')}</div><div class="music-birthday" hidden>Happy birthday,<br>Hikaru.</div><div class="music-glass" aria-hidden="true"></div></div>
-      <div class="music-keys" role="group" aria-label="D major pentatonic scale">${KEYS.map((letter, key) => `<button type="button" class="music-key" data-note="${key}" aria-label="Play ${letter}, ${PITCH_NAMES[key]}" aria-keyshortcuts="${letter}"><span>${letter}</span></button>`).join('')}</div>
-      <div class="music-tone-group"><svg class="music-ticks" viewBox="0 0 160 100" fill="none" aria-hidden="true">${Array.from({ length: 11 }, (_, index) => {
-        const angle = (-65 + index * 13) * Math.PI / 180;
-        const r = index % 5 === 0 ? 76 : 73;
-        return `<path d="M${80 + Math.sin(angle) * (r - (index % 5 === 0 ? 12 : 8))} ${91 - Math.cos(angle) * (r - (index % 5 === 0 ? 12 : 8))} L${80 + Math.sin(angle) * r} ${91 - Math.cos(angle) * r}"/>`;
-      }).join('')}</svg><div class="music-tone" role="slider" tabindex="0" aria-label="Tone" aria-valuemin="0" aria-valuemax="100" aria-valuenow="46" aria-orientation="vertical"><div class="music-knurl"><div class="music-knob-cap"><span></span></div></div></div><span class="music-tone-label">TONE</span></div>
+      <div class="music-toolbar"><div class="music-screen"><div class="music-sequence" aria-hidden="true">${Array.from({ length: 16 }, () => '<span></span>').join('')}</div><div class="music-glass" aria-hidden="true"></div></div><button type="button" class="music-mute music-dark-key" aria-label="Mute sound" aria-pressed="false">${icons.speaker}</button></div>
+      <div class="music-keys" role="group" aria-label="D major pentatonic scale">${KEYS.map((letter, key) => `<button type="button" class="music-key" data-note="${key}" aria-label="Play ${letter}, ${PITCH_NAMES[key]}" aria-keyshortcuts="${letter}" style="--note-color:${NOTE_COLORS[key]}"><span>${letter}</span></button>`).join('')}</div>
       <div class="music-controls"><button type="button" class="music-loop" aria-label="Loop your melody" aria-pressed="false" disabled>${icons.loop}<span>LOOP</span></button><button type="button" class="music-download music-dark-key" aria-label="Download melody as WAV" disabled>${icons.download}</button><button type="button" class="music-reset music-dark-key" aria-label="Clear melody" disabled>${icons.reset}</button></div>
     </div><div class="music-status" role="status" aria-live="polite"></div>
   </section>`;
@@ -32,18 +24,13 @@ export function mountSound(root: HTMLElement): () => void {
   const saveButton = find<HTMLButtonElement>('.music-download');
   const resetButton = find<HTMLButtonElement>('.music-reset');
   const muteButton = find<HTMLButtonElement>('.music-mute');
-  const birthday = find('.music-birthday');
-  const screen = find('.music-screen');
   const status = find('.music-status');
   const cells = [...root.querySelectorAll<HTMLElement>('.music-sequence span')];
   const keys = find('.music-keys');
   const engine = new MusicEngine();
   const display = new MusicDisplay(find<HTMLCanvasElement>('canvas'));
-  const dial = new Dial(find('.music-tone'), value => engine.setTone(value), 46, value => `${value}% brightness`);
   let notes: Note[] = [];
   let phrase = arrange(notes);
-  let recent = '';
-  let success = false;
   let muted = false;
   let looping = false;
   let disposed = false;
@@ -52,7 +39,6 @@ export function mountSound(root: HTMLElement): () => void {
   let nextStep = 0;
   let origin = 0;
   let lastInput = -1;
-  let birthdayTimer = 0;
   let exportUrl: string | null = null;
   const lastKey = Array.from({ length: 6 }, () => -1);
   const keyTimers: number[] = [];
@@ -102,14 +88,6 @@ export function mountSound(root: HTMLElement): () => void {
     void engine.ready().then(() => {
       if (!disposed && !document.hidden && token === generation) engine.play(key, engine.now + .008, velocity, true);
     }).catch(() => { status.textContent = 'Audio is unavailable in this browser.'; });
-    recent = (recent + KEYS[key]).slice(-6);
-    if (recent === 'HIKARU' && !success) {
-      success = true;
-      birthday.hidden = false;
-      screen.classList.add('has-birthday');
-      status.textContent = 'Happy birthday, Hikaru.';
-      birthdayTimer = window.setTimeout(() => { birthday.hidden = true; screen.classList.remove('has-birthday'); }, 4500);
-    }
   }
   buttons.forEach((button, key) => {
     button.addEventListener('pointerdown', event => {
@@ -181,10 +159,8 @@ export function mountSound(root: HTMLElement): () => void {
     muteButton.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound');
   });
   resetButton.addEventListener('click', () => {
-    stopLoop(); notes = []; phrase = arrange(notes); recent = ''; success = false;
-    clearTimeout(birthdayTimer);
-    birthday.hidden = true;
-    screen.classList.remove('has-birthday');
+    stopLoop(); notes = []; phrase = arrange(notes);
+    lastInput = -1; lastKey.fill(-1);
     loopButton.disabled = saveButton.disabled = resetButton.disabled = true;
     status.textContent = '';
     display.clear(); pattern();
@@ -195,7 +171,7 @@ export function mountSound(root: HTMLElement): () => void {
     saveButton.setAttribute('aria-busy', 'true');
     const captured = arrange(notes);
     try {
-      const blob = await renderMelody(captured, dial.current);
+      const blob = await renderMelody(captured);
       if (disposed) return;
       if (exportUrl) URL.revokeObjectURL(exportUrl);
       exportUrl = URL.createObjectURL(blob);
@@ -215,7 +191,7 @@ export function mountSound(root: HTMLElement): () => void {
   pattern();
   return () => {
     disposed = true; pause(); display.destroy();
-    clearTimeout(birthdayTimer); keyTimers.forEach(timer => clearTimeout(timer));
+    keyTimers.forEach(timer => clearTimeout(timer));
     document.removeEventListener('keydown', keyboard);
     document.removeEventListener('visibilitychange', visibility);
     window.removeEventListener('pagehide', pause); window.removeEventListener('pageshow', pageShow);

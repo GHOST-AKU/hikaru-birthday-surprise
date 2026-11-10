@@ -4,6 +4,7 @@ export const PITCH_NAMES = ['D4', 'E4', 'F♯4', 'A4', 'B4', 'D5'] as const;
 export const BPM = 84;
 export const STEP = 60 / BPM / 4;
 export const BAR = STEP * 16;
+const DEFAULT_TONE = .46;
 
 export type Note = { key: number; time: number; velocity: number };
 export type StepNote = { key: number; step: number; velocity: number };
@@ -170,7 +171,7 @@ export class MusicEngine {
   context: AudioContext | null = null;
   private graph: Graph | null = null;
   private voices = new Set<Voice>();
-  private tone = .46;
+  private readonly tone = DEFAULT_TONE;
   private muted = false;
   private lastAnchor = -100;
 
@@ -183,13 +184,6 @@ export class MusicEngine {
       this.graph.output.gain.value = this.muted ? 0 : .82;
     }
     if (this.context.state === 'suspended') await this.context.resume();
-  }
-
-  setTone(value: number): void {
-    this.tone = value;
-    if (!this.graph || !this.context) return;
-    this.graph.filter.frequency.setTargetAtTime(2000 + value * 6000, this.now, .035);
-    this.graph.reverb.gain.setTargetAtTime(.22 - value * .09, this.now, .035);
   }
 
   setMuted(value: boolean): void {
@@ -230,7 +224,7 @@ export class MusicEngine {
   async dispose(): Promise<void> { this.stop(); await this.context?.close(); }
 }
 
-export async function renderMelody(phrase: Phrase, tone: number): Promise<Blob> {
+export async function renderMelody(phrase: Phrase, tone = DEFAULT_TONE): Promise<Blob> {
   const context = new OfflineAudioContext(2, Math.ceil((phrase.duration + 2.5) * 44100), 44100);
   const graph = createGraph(context, context.destination, tone);
   for (let bar = 0; bar * BAR < phrase.duration; bar++) anchor(context, graph.input, bar * BAR);
