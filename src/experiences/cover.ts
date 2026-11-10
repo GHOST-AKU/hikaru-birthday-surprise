@@ -1,236 +1,92 @@
 import './cover.css';
+import { InkRenderer, type Stroke } from './cover/ink';
 
-type Point = { x: number; y: number };
-type Pull = { from: Point; to: Point; radius: number };
-const WIDTH = 600;
-const HEIGHT = 840;
+const ART = ['/ink/calligraphy-placeholder.png', '/ink/portrait-placeholder.png'];
+const NAMES = ['HIKARU', 'Happy birthday', 'Calligraphy', 'Portrait'];
 
 export function mountCover(root: HTMLElement): () => void {
-  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru birthday cover">
-    <div class="cover-workspace">
-      <div class="cover-poster">
-        <canvas class="cover-canvas" width="1200" height="1680" tabindex="0" role="img" aria-label="Interactive birthday cover. Drag to shape the lines. Use arrow keys to sculpt, Enter to regenerate."></canvas>
-        <h1 class="cover-title" aria-label="Hikaru"><span>HI</span><span>KARU</span></h1>
-        <p class="cover-caption">HAPPY BIRTHDAY</p>
-        <span class="cover-cursor" aria-hidden="true"></span>
-      </div>
-      <div class="cover-tools">
-        <div class="cover-presets" role="group" aria-label="Composition">
-          ${[1, 2, 3].map((item) => `<button type="button" class="cover-preset" data-preset="${item - 1}" aria-label="Composition ${item}" aria-pressed="${item === 1}"><span></span></button>`).join('')}
-        </div>
-        <button type="button" class="cover-tool cover-shuffle" aria-label="Regenerate cover"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7h3c5 0 7 10 12 10h3m-4-4 4 4-4 4M3 17h3c2 0 4-3 5-5m2-3c1-1 3-2 5-2h3m-4-4 4 4-4 4"/></svg></button>
-        <button type="button" class="cover-tool cover-save" aria-label="Save cover as PNG"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg></button>
-      </div>
-      <div class="cover-status" role="status" aria-live="polite"></div>
-    </div>
-  </section>`;
+  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru ink canvas"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Drag to paint. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
+  const canvas=root.querySelector<HTMLCanvasElement>('canvas')!;
+  const status=root.querySelector<HTMLElement>('.cover-status')!;
+  const dots=[...root.querySelectorAll('.cover-chapters span')];
+  const save=root.querySelector<HTMLButtonElement>('.cover-save')!;
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+  const targets=Array.from({length:4},()=>document.createElement('canvas'));
+  const blank=document.createElement('canvas');
+  const images: (HTMLImageElement|null)[]=[null,null];
+  let engine:InkRenderer;
+  try { engine=new InkRenderer(canvas); } catch { status.textContent='This browser could not start the ink canvas. Try a browser with WebGL enabled.'; canvas.setAttribute('aria-label',status.textContent);return ()=>{}; }
+  let stage=0,work=0,progress=0,readyAt=0,extra=0,transitionAt=0,previousStage=-1;
+  let frame=0,lastTime=performance.now(),disposed=false,pointer:number|null=null;
+  let last={x:.5,y:.5},keyboard={x:.3,y:.45};
+  let queue:Stroke[]=[];
+  let size={width:1,height:1};
 
-  const canvas = root.querySelector<HTMLCanvasElement>('.cover-canvas')!;
-  const context = canvas.getContext('2d')!;
-  const poster = root.querySelector<HTMLElement>('.cover-poster')!;
-  const cursor = root.querySelector<HTMLElement>('.cover-cursor')!;
-  const status = root.querySelector<HTMLElement>('.cover-status')!;
-  const save = root.querySelector<HTMLButtonElement>('.cover-save')!;
-  const presets = Array.from(root.querySelectorAll<HTMLButtonElement>('.cover-preset'));
-  let preset = 0;
-  let seed = 0;
-  let pulls: Pull[] = [];
-  let active: Pull | null = null;
-  let pointerId: number | null = null;
-  let frame = 0;
-  let revision = 0;
-  let disposed = false;
-
-  function point(event: PointerEvent): Point {
-    const bounds = canvas.getBoundingClientRect();
-    return { x: (event.clientX - bounds.left) / bounds.width * WIDTH, y: (event.clientY - bounds.top) / bounds.height * HEIGHT };
-  }
-
-  function transform(point: Point): Point {
-    const result = { ...point };
-    for (const pull of pulls) {
-      const distance = ((result.x - pull.from.x) ** 2 + (result.y - pull.from.y) ** 2) / pull.radius ** 2;
-      const weight = Math.exp(-distance * 1.6);
-      result.x += (pull.to.x - pull.from.x) * weight * .78;
-      result.y += (pull.to.y - pull.from.y) * weight * .78;
-    }
-    return result;
-  }
-
-  function draw(target: CanvasRenderingContext2D, width: number, height: number, type = false): void {
-    target.setTransform(width / WIDTH, 0, 0, height / HEIGHT, 0, 0);
-    target.clearRect(0, 0, WIDTH, HEIGHT);
-    target.fillStyle = '#f8f5ed';
-    target.fillRect(0, 0, WIDTH, HEIGHT);
-    const centers = [{ x: 300, y: 435 }, { x: 315, y: 439 }, { x: 280, y: 425 }];
-    const center = centers[preset];
-    const rotation = [0, .65, -.42][preset] + seed * .16;
-    const loops = 43;
-    target.strokeStyle = '#42463c';
-    target.lineWidth = .53;
-
-    for (let ring = 0; ring < loops; ring++) {
-      const t = ring / (loops - 1);
-      target.beginPath();
-      for (let step = 0; step <= 400; step++) {
-        const theta = step / 400 * Math.PI * 2;
-        const harmonic = Math.cos(theta * (preset === 2 ? 3 : 4) + rotation) * (33 + t * 19)
-          + Math.sin(theta * 3 - .9 + rotation) * 30
-          + Math.cos(theta * 2 + .5) * 25;
-        const lobe = harmonic * Math.sin(t * Math.PI * .64) + Math.sin(theta * 5 + rotation) * t * 9;
-        const radius = 121 + t * 162 + lobe;
-        const x = center.x + Math.cos(theta) * radius * (1 + t * .08);
-        const y = center.y + Math.sin(theta) * radius * (1.04 + t * .16);
-        const finalPoint = transform({ x, y });
-        if (step === 0) target.moveTo(finalPoint.x, finalPoint.y);
-        else target.lineTo(finalPoint.x, finalPoint.y);
+  function buildTargets():void {
+    const width=canvas.width,height=canvas.height;
+    blank.width=width;blank.height=height;const empty=blank.getContext('2d')!;empty.fillStyle='#fff';empty.fillRect(0,0,width,height);
+    targets.forEach((target,i)=>{
+      target.width=width;target.height=height;const c=target.getContext('2d')!;c.fillStyle='#fff';c.fillRect(0,0,width,height);
+      if(i<2){
+        const text=i===0?'HIKARU':'Happy birthday';let font=Math.min(height*.31,width*(i===0?.21:.115));
+        c.font=`700 ${font}px Georgia, 'Times New Roman', serif`;
+        const limit=width*.88;if(c.measureText(text).width>limit)font*=limit/c.measureText(text).width;
+        c.font=`700 ${font}px Georgia, 'Times New Roman', serif`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#131510';c.fillText(text,width*.5,height*.5);
+      }else if(images[i-2]){
+        const image=images[i-2]!;const scale=Math.min(width*.84/image.width,height*.78/image.height);const w=image.width*scale,h=image.height*scale;c.drawImage(image,(width-w)/2,(height-h)/2,w,h);
       }
-      target.closePath();
-      target.stroke();
-    }
-
-    if (type) {
-      target.fillStyle = '#0c0d0b';
-      target.font = '900 146px Arial, sans-serif';
-      target.textBaseline = 'alphabetic';
-      target.letterSpacing = '-8.4px';
-      const metrics = target.measureText('HI');
-      const baseline = 12 + (146 * .78 - metrics.fontBoundingBoxAscent - metrics.fontBoundingBoxDescent) / 2 + metrics.fontBoundingBoxAscent;
-      target.fillText('HI', 20, baseline);
-      target.save();
-      target.translate(20, 0);
-      target.scale(.92, 1);
-      target.fillText('KARU', 0, baseline + 146 * .78 + 3.3);
-      target.restore();
-      target.font = '500 11px Arial, sans-serif';
-      target.letterSpacing = '0px';
-      const text = 'HAPPY BIRTHDAY';
-      const spacing = 11;
-      const total = target.measureText(text).width + (text.length - 1) * spacing;
-      let x = (WIDTH - total) / 2;
-      for (const character of text) {
-        target.fillText(character, x, 821);
-        x += target.measureText(character).width + spacing;
+    });
+    engine.setTargets(targets[stage],previousStage<0?blank:targets[previousStage]);
+  }
+  function resize():void{
+    const box=canvas.getBoundingClientRect();size={width:box.width,height:box.height};
+    const ratio=Math.min(devicePixelRatio||1,1.6,1700/Math.max(box.width,box.height));engine.resize(Math.max(1,Math.round(box.width*ratio)),Math.max(1,Math.round(box.height*ratio)));buildTargets();
+  }
+  function updateChapter():void{dots.forEach((dot,i)=>{dot.classList.toggle('is-active',i===stage);dot.classList.toggle('is-done',i<stage);});canvas.dataset.chapter=String(stage+1);status.textContent=NAMES[stage];}
+  function reset():void{stage=0;work=0;progress=0;readyAt=0;extra=0;previousStage=-1;transitionAt=0;queue=[];engine.reset();buildTargets();updateChapter();}
+  function paint(next:{x:number;y:number},pressure=.5):void{
+    const distance=Math.hypot((next.x-last.x)*size.width,(next.y-last.y)*size.height);
+    const unit=distance/Math.hypot(size.width,size.height);
+    if(distance>.5){
+      if(!transitionAt){
+        work+=Math.min(.2,unit);progress=Math.min(1,work/5.5);
+        if(progress>=.92){progress=1;if(!readyAt){readyAt=performance.now();extra=0;}else extra+=unit;}
+        if(readyAt&&performance.now()-readyAt>1600&&extra>.65&&stage<3&&(stage<1||images[stage-1])){
+          previousStage=stage;stage++;work=0;progress=0;readyAt=0;extra=0;transitionAt=performance.now();engine.next();engine.setTargets(targets[stage],targets[previousStage]);updateChapter();
+        }
       }
-    }
+      queue.push({px:last.x,py:last.y,x:next.x,y:next.y,pressure:Math.max(.024,Math.min(.07,(36+pressure*20-distance*.16)/size.height))});
+      if(queue.length>24)queue.splice(0,queue.length-24);
+    }else queue.push({px:next.x,py:next.y,x:next.x,y:next.y,pressure:Math.min(.07,38/size.height)});
+    last=next;
   }
-
-  function render(): void {
-    frame = 0;
-    if (!disposed) draw(context, canvas.width, canvas.height);
+  function point(event:PointerEvent):{x:number;y:number}{const rect=canvas.getBoundingClientRect();return {x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height};}
+  const down=(event:PointerEvent)=>{if(event.button!==0||pointer!==null)return;event.preventDefault();pointer=event.pointerId;last=point(event);canvas.setPointerCapture(pointer);root.classList.add('has-pointer-input');canvas.focus({preventScroll:true});paint(last,event.pressure);};
+  const move=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;const samples=event.getCoalescedEvents?.()||[];for(const sample of samples.length?samples:[event])paint(point(sample),sample.pressure||.5);};
+  const up=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;if(canvas.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer);pointer=null;};
+  function animate(now:number):void{
+    if(disposed)return;if(!queue.length&&now-lastTime<32){frame=requestAnimationFrame(animate);return;}const dt=Math.min(.035,Math.max(.001,(now-lastTime)/1000));lastTime=now;
+    let fade=0;if(transitionAt){fade=Math.max(0,1-(now-transitionAt)/2000);if(fade===0){transitionAt=0;previousStage=-1;}}
+    const strokes=queue.splice(0,Math.min(3,queue.length));
+    if(strokes.length){strokes.forEach((stroke,i)=>engine.draw(now/1000,dt/strokes.length,progress,fade,stroke,reduced.matches,i===strokes.length-1));}else engine.draw(now/1000,dt,progress,fade,null,reduced.matches);
+    canvas.dataset.progress=progress.toFixed(3);frame=requestAnimationFrame(animate);
   }
-
-  function schedule(): void {
-    if (!frame) frame = requestAnimationFrame(render);
-  }
-
-  function regenerate(nextPreset = preset, randomize = true): void {
-    preset = nextPreset;
-    seed = randomize ? Math.random() * Math.PI * 2 : 0;
-    pulls = [];
-    active = null;
-    revision++;
-    canvas.dataset.revision = String(revision);
-    presets.forEach((button, index) => button.setAttribute('aria-pressed', String(index === preset)));
-    schedule();
-  }
-
-  function down(event: PointerEvent): void {
-    if (event.button !== 0 || pointerId !== null) return;
-    event.preventDefault();
-    canvas.focus({ preventScroll: true });
-    pointerId = event.pointerId;
-    const start = point(event);
-    active = { from: start, to: { ...start }, radius: 195 };
-    if (pulls.length >= 10) pulls.shift();
-    pulls.push(active);
-    canvas.setPointerCapture(event.pointerId);
-    poster.classList.add('is-sculpting');
-  }
-
-  function move(event: PointerEvent): void {
-    const next = point(event);
-    cursor.style.left = `${next.x / WIDTH * 100}%`;
-    cursor.style.top = `${next.y / HEIGHT * 100}%`;
-    if (event.pointerType === 'mouse') poster.classList.add('has-pointer');
-    if (event.pointerId !== pointerId || !active) return;
-    const dx = next.x - active.from.x;
-    const dy = next.y - active.from.y;
-    const distance = Math.hypot(dx, dy);
-    const multiplier = distance > 200 ? 200 / distance : 1;
-    active.to = { x: active.from.x + dx * multiplier, y: active.from.y + dy * multiplier };
-    revision++;
-    canvas.dataset.revision = String(revision);
-    schedule();
-  }
-
-  function up(event: PointerEvent): void {
-    if (event.pointerId !== pointerId) return;
-    if (active && Math.hypot(active.to.x - active.from.x, active.to.y - active.from.y) < 5) {
-      active.to.y -= 35;
-      schedule();
-    }
-    pointerId = null;
-    active = null;
-    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-    poster.classList.remove('is-sculpting');
-  }
-
-  function key(event: KeyboardEvent): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      regenerate();
-    } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
-      event.preventDefault();
-      if (!pulls.length) pulls.push({ from: { x: 300, y: 435 }, to: { x: 300, y: 435 }, radius: 280 });
-      const pull = pulls[pulls.length - 1];
-      if (event.key === 'ArrowUp') pull.to.y -= 12;
-      if (event.key === 'ArrowDown') pull.to.y += 12;
-      if (event.key === 'ArrowLeft') pull.to.x -= 12;
-      if (event.key === 'ArrowRight') pull.to.x += 12;
-      revision++;
-      canvas.dataset.revision = String(revision);
-      schedule();
-    }
-  }
-
-  async function download(): Promise<void> {
-    save.disabled = true;
-    try {
-      const output = document.createElement('canvas');
-      output.width = 1800;
-      output.height = 2520;
-      draw(output.getContext('2d')!, output.width, output.height, true);
-      const blob = await new Promise<Blob>((resolve, reject) => output.toBlob(result => result ? resolve(result) : reject(new Error('Export failed')), 'image/png'));
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'hikaru-birthday-cover.png';
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
-      status.textContent = 'Cover saved.';
-    } catch {
-      status.textContent = 'Could not save. Please try again.';
-    } finally {
-      save.disabled = false;
-    }
-  }
-
-  presets.forEach((button, index) => button.addEventListener('click', () => regenerate(index, false)));
-  root.querySelector('.cover-shuffle')!.addEventListener('click', () => regenerate());
-  save.addEventListener('click', () => void download());
-  canvas.addEventListener('pointerdown', down);
-  canvas.addEventListener('pointermove', move);
-  canvas.addEventListener('pointerup', up);
-  canvas.addEventListener('pointercancel', up);
-  canvas.addEventListener('pointerleave', () => poster.classList.remove('has-pointer'));
-  canvas.addEventListener('keydown', key);
-  render();
-
-  return () => {
-    disposed = true;
-    cancelAnimationFrame(frame);
+  const pause=()=>{cancelAnimationFrame(frame);pointer=null;queue=[];};
+  const visibility=()=>{pause();if(!document.hidden&&!disposed){lastTime=performance.now();frame=requestAnimationFrame(animate);}};
+  const key=(event:KeyboardEvent)=>{
+    root.classList.remove('has-pointer-input');
+    if(event.key.toLowerCase()==='r'){event.preventDefault();reset();return;}
+    if(!event.key.startsWith('Arrow'))return;event.preventDefault();last={...keyboard};const step=.035;
+    if(event.key==='ArrowLeft')keyboard.x-=step;if(event.key==='ArrowRight')keyboard.x+=step;if(event.key==='ArrowUp')keyboard.y-=step;if(event.key==='ArrowDown')keyboard.y+=step;
+    keyboard.x=Math.max(.02,Math.min(.98,keyboard.x));keyboard.y=Math.max(.02,Math.min(.98,keyboard.y));paint(keyboard);
   };
+  save.addEventListener('click',()=>{
+    save.disabled=true;canvas.toBlob(blob=>{save.disabled=false;if(!blob||disposed)return;const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`hikaru-ink-${stage+1}.png`;document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);},'image/png');
+  });
+  root.querySelector('.cover-reset')!.addEventListener('click',reset);
+  canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);canvas.addEventListener('lostpointercapture',up);canvas.addEventListener('keydown',key);
+  const observer=new ResizeObserver(resize);observer.observe(canvas);resize();updateChapter();frame=requestAnimationFrame(animate);
+  ART.forEach((src,i)=>{const image=new Image();image.onload=()=>{if(disposed)return;images[i]=image;buildTargets();};image.onerror=()=>{status.textContent='Artwork could not load. Reload to try again.';};image.src=src;});
+  document.addEventListener('visibilitychange',visibility);window.addEventListener('pagehide',pause);window.addEventListener('pageshow',visibility);
+  return ()=>{disposed=true;cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',pause);window.removeEventListener('pageshow',visibility);engine.destroy();};
 }
