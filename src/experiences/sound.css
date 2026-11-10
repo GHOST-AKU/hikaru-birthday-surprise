@@ -1,0 +1,119 @@
+body[data-experience='sound'] {
+  margin: 0;
+  background: #152333;
+  color: #f8ebd1;
+  font-family: Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+body[data-experience='sound'] * { box-sizing: border-box; }
+body[data-experience='sound'] #app {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 34px 24px 36px;
+  overflow: clip;
+}
+.sound-instrument {
+  width: min(1040px, 84vw, calc((100svh - 136px) * 1.16));
+  position: relative;
+}
+.sound-visual {
+  position: relative;
+  width: 120%;
+  margin-left: -10%;
+  aspect-ratio: 2 / 1;
+  margin-bottom: 28px;
+}
+.sound-visual canvas { display: block; width: 100%; height: 100%; transition: opacity .6s ease; }
+.sound-visual:has(.sound-birthday.is-revealed) canvas { opacity: .38; }
+.sound-birthday {
+  position: absolute;
+  left: 16%;
+  top: 31%;
+  width: 42%;
+  font-size: clamp(28px, 3.4vw, 52px);
+  line-height: 1.06;
+  letter-spacing: -.055em;
+  font-weight: 500;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity .9s ease, transform .9s cubic-bezier(.2,.8,.3,1);
+}
+.sound-birthday[hidden] { display: none; }
+.sound-birthday.is-revealed { opacity: 1; transform: translateY(0); }
+.sound-keys { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; }
+.sound-key {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: .84;
+  padding: 0 0 3%;
+  border: 1px solid #f8ebd1;
+  border-radius: 17px 17px 15px 15px;
+  color: #152333;
+  background: linear-gradient(145deg, #fff2db 0%, #f2e3c9 78%, #ebd8ba 100%);
+  box-shadow: inset 0 4px 2px #fffaf1c2, inset 0 -5px 2px #b99e7338, 0 2px 0 #b7a085, 0 8px 12px #0814202b;
+  font: 400 clamp(32px, 7.5vw, 108px)/1 Arial, sans-serif;
+  letter-spacing: -.065em;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform .08s ease-out, background .1s, box-shadow .08s;
+}
+.sound-key.is-down, .sound-key:active {
+  transform: translateY(5px);
+  background: var(--key-color);
+  box-shadow: inset 0 2px 3px #fffaf166, inset 0 -2px 2px #0814201a, 0 1px 0 #b7a085;
+}
+.sound-key:focus-visible, .sound-control:focus-visible { outline: 2px solid #ff845e; outline-offset: 6px; }
+.sound-controls { display: flex; justify-content: center; gap: 38px; margin-top: 42px; }
+.sound-control {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f8ebd1;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .2s, transform .15s;
+}
+.sound-control svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
+.sound-control:hover:not(:disabled) { transform: translateY(-2px); }
+.sound-control:active:not(:disabled) { transform: translateY(1px); }
+.sound-control:disabled { opacity: .26; cursor: default; }
+.sound-control[aria-pressed='true'] { color: #ff845e; }
+.sound-control .sound-stop { display: none; }
+.sound-control[aria-pressed='true'] .sound-play { display: none; }
+.sound-control[aria-pressed='true'] .sound-stop { display: block; }
+.sound-control[aria-busy='true'] { animation: sound-saving .7s ease-in-out infinite alternate; }
+.sound-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes sound-saving { to { opacity: .35; } }
+@media (max-width: 700px) {
+  body[data-experience='sound'] #app { padding: 70px 24px 42px; }
+  .sound-instrument { width: min(560px, calc(100vw - 40px)); }
+  .sound-visual { width: 126%; margin-left: -13%; margin-bottom: 54px; }
+  .sound-key { border-radius: 8px; aspect-ratio: .66; font-size: clamp(30px, 8vw, 56px); box-shadow: inset 0 2px 1px #fffaf1c2, inset 0 -3px 1px #b99e7338, 0 2px 0 #b7a085; }
+  .sound-controls { margin-top: 34px; gap: 28px; }
+  .sound-control { width: 48px; height: 48px; }
+  .sound-birthday { font-size: clamp(22px, 5.5vw, 36px); }
+}
+@media (max-height: 620px) and (min-width: 701px) {
+  body[data-experience='sound'] #app { padding-top: 58px; }
+  .sound-instrument { width: min(680px, 75vw); }
+  .sound-visual { width: 90%; margin-left: 5%; margin-bottom: 18px; }
+  .sound-key { aspect-ratio: 1.1; font-size: 52px; }
+  .sound-controls { margin-top: 24px; gap: 24px; }
+  .sound-control { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sound-instrument *, .sound-instrument *::before, .sound-instrument *::after { transition: none !important; animation: none !important; }
+}
