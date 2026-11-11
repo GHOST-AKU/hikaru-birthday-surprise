@@ -2,15 +2,15 @@ import './style.css';
 import { SignalDisplay } from './signal';
 import { InstrumentAudio } from './audio';
 import { Dial } from './dial';
-import { downloadTicket, messages, receiptSVG, type Language, type Ticket } from './receipt';
+import { channels, frequencyAt, reception } from './radio/channels';
+import { downloadTicket, ticketLabel, receiptSVG, type Language, type Ticket } from './receipt';
 
-const soundIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M11 4 5 8H2v8h3l6 4V4Z"/><path class="sound-muted" d="m17 9 5 6m0-6-5 6"/><g class="sound-waves"><path d="M15 8a6 6 0 0 1 0 8M18 4a11 11 0 0 1 0 16"/></g></svg>`;
 const printIcon = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M8 12V4h16v8M8 24H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h24a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4"/><path d="M8 20h16v10H8zM12 24h8"/><circle cx="25" cy="15" r="1" fill="currentColor" stroke="none"/></svg>`;
 const downloadIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4"/></svg>`;
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="stage">
-    <section class="instrument" aria-label="Birthday instrument">
+    <section class="instrument" aria-label="Hikaru birthday radio">
       <div class="machine">
         <div class="faceplate" aria-hidden="true"></div>
         <i class="screw screw-tl" aria-hidden="true"></i>
@@ -19,21 +19,28 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <i class="screw screw-br" aria-hidden="true"></i>
         <header class="device-header">
           <h1>HIKARU</h1>
-          <button class="sound-button" type="button" aria-label="Turn sound on" aria-pressed="false">${soundIcon}</button>
+          <label class="volume-control"><span>VOL</span><span class="volume-rail"><input id="volume" type="range" min="0" max="100" value="42" aria-label="Volume"/><i aria-hidden="true"></i></span></label>
         </header>
-        <div class="display" aria-hidden="true"><canvas id="signal"></canvas><div class="glass"></div></div>
+        <div class="display">
+          <div class="radio-readout"><div><span id="frequency">88.8</span><small>FM</small></div><div class="channel-readout"><i class="lock-light is-locked" aria-hidden="true"></i><span id="channel-name">BIRTHDAY</span></div></div>
+          <canvas id="signal" aria-hidden="true"></canvas>
+          <div class="tuner-band" aria-hidden="true">${channels.map(item => `<i style="left:${item.position*100}%"></i>`).join('')}<b id="tuner-needle"></b></div><div class="glass" aria-hidden="true"></div>
+        </div>
         <div class="dial-group">
-          <svg class="dial-scale" viewBox="0 0 190 150" fill="none" aria-hidden="true">${Array.from({ length: 11 }, (_, index) => {
-            const angle = (-62 + index * 12.4) * Math.PI / 180;
-            const radius = index % 5 === 0 ? 89 : 85;
-            return `<path d="M${95 + Math.sin(angle) * (radius - (index % 5 === 0 ? 14 : 9))} ${105 - Math.cos(angle) * (radius - (index % 5 === 0 ? 14 : 9))} L${95 + Math.sin(angle) * radius} ${105 - Math.cos(angle) * radius}"/>`;
+          <svg class="dial-scale" viewBox="-10 -10 210 210" fill="none" aria-hidden="true">${Array.from({ length: 26 }, (_, index) => {
+            const angle = (-125 + index * 10) * Math.PI / 180;
+            const strong = [2,9,16,23].includes(index);
+            return `<path d="M${95 + Math.sin(angle) * (strong ? 73 : 78)} ${95 - Math.cos(angle) * (strong ? 73 : 78)} L${95 + Math.sin(angle) * 84} ${95 - Math.cos(angle) * 84}" stroke-width="${strong ? 2.5 : 1}"/>`;
+          }).join('')}${channels.map(item => {
+            const angle = (-125 + item.position * 250) * Math.PI / 180;
+            return `<text x="${95 + Math.sin(angle) * 97}" y="${97 - Math.cos(angle) * 97}" text-anchor="middle" fill="currentColor" stroke="none" font-size="6.5">${item.frequency}</text>`;
           }).join('')}</svg>
-          <div class="dial" role="slider" tabindex="0" aria-label="Comfy to chaos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="64" aria-orientation="vertical">
+          <div class="dial" role="slider" tabindex="0" aria-label="Tune radio" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8" aria-orientation="vertical">
             <div class="dial-grip"><div class="dial-cap"><span class="dial-pointer"></span></div></div>
           </div>
-          <div class="dial-labels" aria-hidden="true"><span>COMFY</span><span>CHAOS</span></div>
+          <div class="dial-labels" aria-hidden="true"><span>FM</span><span>TUNE</span></div>
         </div>
-        <div class="language-switch" role="group" aria-label="Ticket language">
+        <div class="language-switch" role="group" aria-label="Broadcast and ticket language">
           <span class="language-thumb" aria-hidden="true"></span>
           <button type="button" data-language="en" aria-label="English" aria-pressed="true">EN</button>
           <button type="button" data-language="zh" aria-label="繁體中文" aria-pressed="false" lang="zh-Hant">中</button>
@@ -59,32 +66,56 @@ const stage = element('.stage');
 const machine = element('.machine');
 const paper = element('.paper');
 const mount = element('.receipt-mount');
-const soundButton = element<HTMLButtonElement>('.sound-button');
+const volume = element<HTMLInputElement>('#volume');
+const channelName = element('#channel-name');
+const frequency = element('#frequency');
+const lockLight = element('.lock-light');
+const tunerNeedle = element('#tuner-needle');
 const printButton = element<HTMLButtonElement>('.print-button');
 const saveButton = element<HTMLButtonElement>('.download-button');
 const languageSwitch = element('.language-switch');
 const status = element('#status');
-const signal = new SignalDisplay(element<HTMLCanvasElement>('#signal'));
-const audio = new InstrumentAudio();
-const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-const dial = new Dial(element('.dial'), value => {
-  signal.setMood(value);
-  audio.tick(value);
-});
 let language: Language = 'en';
-let ticket: Ticket | null = null;
 let printing = false;
+const audio = new InstrumentAudio(() => {
+  status.textContent = language === 'zh' ? '音訊未能載入，請再撥動旋鈕重試。' : 'Audio could not load. Move the dial to retry.';
+});
+const signal = new SignalDisplay(element<HTMLCanvasElement>('#signal'), data => audio.waveform(data));
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+function updateTuner(position: number): void {
+  const received = reception(position);
+  frequency.textContent = frequencyAt(position);
+  channelName.textContent = received.strength > .25 ? received.channel.title[language] : '— — —';
+  channelName.style.opacity = String(.35 + received.strength * .65);
+  lockLight.classList.toggle('is-locked', received.locked);
+  tunerNeedle.style.left = `${position * 100}%`;
+  printButton.disabled = printing || !received.locked;
+  printButton.setAttribute('aria-label', received.locked ? (language === 'zh' ? `列印 ${received.channel.title.zh} 紙票` : `Print ${received.channel.title.en} ticket`) : (language === 'zh' ? '調準頻道後列印' : 'Tune to a station to print'));
+}
+const dial = new Dial(element('.dial'), position => {
+  audio.tune(position);
+  updateTuner(position);
+}, 8, value => {
+  const received = reception(value / 100);
+  return `${frequencyAt(value / 100)} FM, ${received.locked ? received.channel.title[language] : language === 'zh' ? '調頻中' : 'tuning'}`;
+}, channels.map(item => item.position * 100));
+let ticket: Ticket | null = null;
 let detached = false;
 let dragStart = 0;
 let dragPointer: number | null = null;
 let pull = 0;
 
-soundButton.addEventListener('click', async () => {
-  soundButton.disabled = true;
-  const enabled = await audio.toggle(dial.current);
-  soundButton.setAttribute('aria-pressed', String(enabled));
-  soundButton.setAttribute('aria-label', enabled ? 'Turn sound off' : 'Turn sound on');
-  soundButton.disabled = false;
+const activate = (): void => { void audio.activate(); };
+element('.dial').addEventListener('pointerdown', activate);
+element('.dial').addEventListener('keydown', event => {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown','Home','End'].includes(event.key)) activate();
+});
+volume.addEventListener('pointerdown', activate);
+volume.addEventListener('input', () => {
+  audio.setVolume(Number(volume.value) / 100);
+  volume.closest<HTMLElement>('.volume-control')!.style.setProperty('--volume', volume.value);
+  volume.setAttribute('aria-valuetext', `${volume.value}%`);
+  activate();
 });
 
 document.querySelectorAll<HTMLButtonElement>('[data-language]').forEach(button => {
@@ -94,14 +125,17 @@ document.querySelectorAll<HTMLButtonElement>('[data-language]').forEach(button =
     document.querySelectorAll('[data-language]').forEach(option => {
       option.setAttribute('aria-pressed', String((option as HTMLElement).dataset.language === language));
     });
-    audio.tick(language === 'zh' ? 0.7 : 0.2);
+    audio.setLanguage(language);
+    updateTuner(dial.current);
+    activate();
   });
 });
 
 const delay = (milliseconds: number) => new Promise<void>(resolve => window.setTimeout(resolve, milliseconds));
 
 printButton.addEventListener('click', async () => {
-  if (printing) return;
+  if (printing || !reception(dial.current).locked) return;
+  activate();
   printing = true;
   detached = false;
   printButton.disabled = true;
@@ -111,7 +145,7 @@ printButton.addEventListener('click', async () => {
   paper.tabIndex = -1;
   mount.setAttribute('aria-hidden', 'true');
   status.textContent = '';
-  ticket = { language, mood: dial.current, phase: signal.snapshot() };
+  ticket = { language, channel: reception(dial.current).channel.id, elapsed: audio.snapshot(), waveform: signal.snapshot() };
 
   if (stage.classList.contains('ticket-visible')) {
     mount.classList.add('is-clearing');
@@ -130,18 +164,19 @@ printButton.addEventListener('click', async () => {
   mount.classList.remove('is-clearing');
   mount.setAttribute('aria-hidden', 'false');
   paper.classList.add('is-fed');
-  audio.print(ticket.mood);
+  audio.print();
   await delay(reduced.matches ? 30 : 1900);
   mount.classList.add('is-ready');
   machine.classList.remove('is-printing');
   paper.tabIndex = 0;
-  printButton.disabled = false;
+  updateTuner(dial.current);
   printButton.removeAttribute('aria-busy');
   saveButton.hidden = false;
   saveButton.disabled = false;
   saveButton.setAttribute('aria-label', ticket.language === 'zh' ? '儲存生日紙票' : 'Save birthday ticket');
-  status.textContent = messages[ticket.language].label;
+  status.textContent = ticketLabel(ticket);
   printing = false;
+  updateTuner(dial.current);
 });
 
 function detach(): void {
@@ -216,3 +251,5 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('pagehide', () => void audio.pause());
+
+window.addEventListener('pageshow', () => { if (!document.hidden) void audio.resume(); });

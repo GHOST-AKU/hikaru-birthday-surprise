@@ -5,7 +5,7 @@ export class Dial {
   private startX = 0;
   private startValue = 64;
 
-  constructor(private element: HTMLElement, private onChange: (value: number) => void, initial = 64, private describe = (value: number) => `${100 - value}% comfy, ${value}% chaos`) {
+  constructor(private element: HTMLElement, private onChange: (value: number) => void, initial = 64, private describe = (value: number) => `${100 - value}% comfy, ${value}% chaos`, private stops: readonly number[] = []) {
     element.addEventListener('pointerdown', this.down);
     element.addEventListener('pointermove', this.move);
     element.addEventListener('pointerup', this.up);
@@ -52,6 +52,8 @@ export class Dial {
       const angle = Math.atan2(event.clientX - rect.left - rect.width / 2, -(event.clientY - rect.top - rect.height / 2)) * 180 / Math.PI;
       this.set((Math.max(-125, Math.min(125, angle)) + 125) / 2.5);
     }
+    const nearest = this.stops.reduce((best, point) => Math.abs(point - this.value) < Math.abs(best - this.value) ? point : best, Infinity);
+    if (Math.abs(nearest - this.value) <= 4) this.set(nearest);
     this.element.releasePointerCapture(event.pointerId);
     this.cancel();
   };
@@ -63,12 +65,16 @@ export class Dial {
 
   private key = (event: KeyboardEvent): void => {
     const changes: Record<string, number> = { ArrowUp: 2, ArrowRight: 2, ArrowDown: -2, ArrowLeft: -2, PageUp: 10, PageDown: -10 };
-    if (event.key in changes) {
+    if ((event.key === 'PageUp' || event.key === 'PageDown') && this.stops.length) {
+      event.preventDefault();
+      const next = event.key === 'PageUp' ? this.stops.find(point => point > this.value + 1) : [...this.stops].reverse().find(point => point < this.value - 1);
+      if (next !== undefined) this.set(next);
+    } else if (event.key in changes) {
       event.preventDefault();
       this.set(this.value + changes[event.key]);
     } else if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
-      this.set(event.key === 'Home' ? 0 : 100);
+      this.set(event.key === 'Home' ? (this.stops[0] ?? 0) : (this.stops[this.stops.length - 1] ?? 100));
     }
   };
 }
