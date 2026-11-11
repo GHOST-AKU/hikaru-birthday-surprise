@@ -5,17 +5,19 @@ const ART = ['/ink/calligraphy-placeholder.png', '/ink/portrait-placeholder.png'
 const NAMES = ['HIKARU', 'Happy birthday', 'Calligraphy', 'Portrait'];
 
 export function mountCover(root: HTMLElement): () => void {
-  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru — Inkflow"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Press to release ink; drag to guide the current. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
+  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru — Inkflow"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Press to release ink; drag to guide the current. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button><button class="cover-tool cover-gift" type="button" aria-label="放水，打开下一份礼物" title="放水 · 下一份" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C3 9 5 2 8 4c2 1 4 5 4 5Zm0 0c9 0 7-7 4-5-2 1-4 5-4 5Z"/></svg><span>下一份</span></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
   const canvas=root.querySelector<HTMLCanvasElement>('canvas')!;
   const status=root.querySelector<HTMLElement>('.cover-status')!;
   const dots=[...root.querySelectorAll('.cover-chapters span')];
   const save=root.querySelector<HTMLButtonElement>('.cover-save')!;
+  const gift=root.querySelector<HTMLButtonElement>('.cover-gift')!;
+  let hasInk=false,focusAfterWash=false;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const targets=Array.from({length:4},()=>document.createElement('canvas'));
   const blank=document.createElement('canvas');
   const images: (HTMLImageElement|null)[]=[null,null];
   let engine:InkRenderer;
-  try { engine=new InkRenderer(canvas); } catch { status.textContent='This browser could not start the ink canvas. Try a browser with WebGL enabled.'; canvas.setAttribute('aria-label',status.textContent);return ()=>{}; }
+  try { engine=new InkRenderer(canvas); } catch { status.textContent='This browser could not start the ink canvas. Try a browser with WebGL 2 enabled.'; status.classList.add('is-error'); canvas.setAttribute('aria-label',status.textContent);return ()=>{}; }
   let stage=0,progress=0,mode=0,phaseTime=0,clock=0,lastMeasure=0;
   let frame=0,lastTime=performance.now(),disposed=false,pointer:number|null=null;
   let last={x:.5,y:.5},keyboard={x:.3,y:.45};
@@ -47,23 +49,25 @@ export function mountCover(root: HTMLElement): () => void {
   }
   function resize():void{
     const box=canvas.getBoundingClientRect();size={width:box.width,height:box.height};
-    const ratio=Math.min(devicePixelRatio||1,2,2200/Math.max(box.width,box.height));
+    const ratio=Math.min(devicePixelRatio||1,2,3000/Math.max(box.width,box.height));
     const width=Math.max(1,Math.round(box.width*ratio)),height=Math.max(1,Math.round(box.height*ratio));
     if(width===canvas.width&&height===canvas.height)return;
-    engine.resize(width,height);mode=0;progress=0;phaseTime=clock;buildTargets();
+    engine.resize(width,height);buildTargets();
   }
   function updateChapter():void{dots.forEach((dot,i)=>{dot.classList.toggle('is-active',i===stage);dot.classList.toggle('is-done',i<stage);});canvas.dataset.chapter=String(stage+1);status.textContent=NAMES[stage];}
-  function reset():void{stage=0;progress=0;mode=0;phaseTime=clock;queue=[];engine.reset();buildTargets();updateChapter();}
+  function reset():void{if(pointer!==null&&canvas.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer);stage=0;progress=0;mode=0;phaseTime=clock;queue=[];hasInk=false;gift.hidden=true;gift.disabled=false;pointer=null;engine.reset();buildTargets();updateChapter();}
   function paint(next:{x:number;y:number},pressure=.5):void{
+    if(mode!==0)return;
+    hasInk=true;gift.hidden=false;
     const distance=Math.hypot((next.x-last.x)*size.width,(next.y-last.y)*size.height);
     if(distance>.5){
-      queue.push({px:last.x,py:last.y,x:next.x,y:next.y,pressure:Math.max(.012,Math.min(.045,(17+pressure*17-distance*.08)/size.height))});
+      queue.push({px:last.x,py:last.y,x:next.x,y:next.y,pressure:Math.max(.008,Math.min(.035,(11+pressure*13-distance*.035)/size.height))});
       if(queue.length>24)queue.splice(0,queue.length-24);
-    }else queue.push({px:next.x,py:next.y,x:next.x,y:next.y,pressure:Math.min(.045,26/size.height)});
+    }else queue.push({px:next.x,py:next.y,x:next.x,y:next.y,pressure:Math.min(.035,18/size.height)});
     last=next;
   }
   function point(event:PointerEvent):{x:number;y:number}{const rect=canvas.getBoundingClientRect();return {x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height};}
-  const down=(event:PointerEvent)=>{if(event.button!==0||pointer!==null)return;event.preventDefault();pointer=event.pointerId;last=point(event);canvas.setPointerCapture(pointer);root.classList.add('has-pointer-input');canvas.focus({preventScroll:true});paint(last,event.pressure);};
+  const down=(event:PointerEvent)=>{if(event.button!==0||pointer!==null||mode!==0)return;event.preventDefault();pointer=event.pointerId;last=point(event);canvas.setPointerCapture(pointer);root.classList.add('has-pointer-input');canvas.focus({preventScroll:true});paint(last,event.pressure);};
   const move=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;const samples=event.getCoalescedEvents?.()||[];for(const sample of samples.length?samples:[event])paint(point(sample),sample.pressure||.5);};
   const up=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;if(canvas.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer);pointer=null;};
   function animate(now:number):void{
@@ -72,16 +76,17 @@ export function mountCover(root: HTMLElement): () => void {
     if(pointer!==null&&!queue.length)paint(last,.5);
     if(clock-lastMeasure>.7){
       const measured=engine.coverage();progress=measured.coverage;lastMeasure=clock;
-      if(mode===0&&progress>.84){mode=1;phaseTime=clock;status.textContent='The current carries the loose ink away.';}
-      else if(mode===1&&clock-phaseTime>3.5&&measured.ink<.006){mode=2;phaseTime=clock;status.textContent='The water washes the image away.';}
-    }
-    if(mode===2&&clock-phaseTime>4.5){
       const next=(stage+1)%4;
-      if(next<2||images[next-2]){stage=next;mode=0;phaseTime=clock;progress=0;queue=[];engine.next();engine.setTargets(targets[stage],blank);updateChapter();}
+      if(mode===0)gift.disabled=!hasInk||(next>1&&!images[next-2]);
+      if(mode===1&&clock-phaseTime>7&&measured.coverage<.008&&measured.ink<.006){
+        stage=next;mode=0;phaseTime=clock;progress=0;queue=[];hasInk=false;
+        gift.hidden=true;gift.disabled=false;engine.next();engine.setTargets(targets[stage],blank);updateChapter();
+        if(focusAfterWash){canvas.focus({preventScroll:true});focusAfterWash=false;}
+      }
     }
     const strokes=queue.splice(0,Math.min(3,queue.length));
-    if(strokes.length){strokes.forEach((stroke,i)=>engine.draw(clock,dt/strokes.length,mode,0,stroke,reduced.matches,i===strokes.length-1));}else engine.draw(clock,dt,mode,0,null,reduced.matches);
-    canvas.dataset.phase=['stain','clear-water','release'][mode];
+    if(strokes.length){strokes.forEach((stroke,i)=>engine.draw(clock,dt/strokes.length,mode,mode===1?clock-phaseTime:0,stroke,reduced.matches,i===strokes.length-1));}else engine.draw(clock,dt,mode,mode===1?clock-phaseTime:0,null,reduced.matches);
+    canvas.dataset.phase=['stain','rinse'][mode];
     canvas.dataset.progress=progress.toFixed(3);frame=requestAnimationFrame(animate);
   }
   const pause=()=>{cancelAnimationFrame(frame);pointer=null;queue=[];};
@@ -95,6 +100,13 @@ export function mountCover(root: HTMLElement): () => void {
   };
   save.addEventListener('click',()=>{
     save.disabled=true;canvas.toBlob(blob=>{save.disabled=false;if(!blob||disposed)return;const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`hikaru-ink-${stage+1}.png`;document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);},'image/png');
+  });
+  gift.addEventListener('click',()=>{
+    const next=(stage+1)%4;
+    if(mode!==0||!hasInk||(next>1&&!images[next-2]))return;
+    mode=1;phaseTime=clock;queue=[];gift.disabled=true;focusAfterWash=document.activeElement===gift;
+    if(pointer!==null&&canvas.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer);
+    pointer=null;status.textContent='Water released. The next gift appears when the ink has washed away.';
   });
   root.querySelector('.cover-reset')!.addEventListener('click',reset);
   canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);canvas.addEventListener('lostpointercapture',up);canvas.addEventListener('keydown',key);

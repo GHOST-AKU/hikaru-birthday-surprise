@@ -15,3 +15,10 @@ body[data-experience='ink'] { margin: 0; background: #fff; color: #252620; overf
 @media(prefers-reduced-motion:reduce){.cover-experience * {transition:none!important;}}
 
 .has-pointer-input .cover-canvas:focus-visible { outline: none; }
+
+.cover-tool[hidden] { display: none; }
+.cover-gift { width: auto; padding: 0 15px 0 12px; display: flex; gap: 8px; border-radius: 24px; }
+.cover-gift span { font-size: 12px; letter-spacing: .08em; white-space: nowrap; }
+.cover-gift svg { width: 18px; height: 18px; }
+
+.cover-status.is-error { position:absolute; width:auto; height:auto; inset:45% 24px auto; overflow:visible; clip-path:none; white-space:normal; text-align:center; font-size:14px; color:#56646b; }

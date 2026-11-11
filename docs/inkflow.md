@@ -1,15 +1,21 @@
 # 墨流 / INKFLOW
 
-The public route is `/ink`; `/cover` remains a built alias and replaces its URL with `/ink`. Navigation and page title use the new name.
+Public route `/ink`; `/cover` remains a compatible alias. Third and fourth motifs still use the approved placeholder art.
 
-The WebGL field separates mobile diffuse pigment (R), stationary contact stain (G), and a more coherent oily pigment (B). The velocity is a procedural divergence-free curl component, a gentle directional current, pointer-induced vortices and local drag momentum. This is an artistic advection model, not a full pressure-solved physical fluid simulation. Pigment uses bilinear semi-Lagrangian advection. Diffuse pigment has neighbor diffusion; coherent pigment preserves sharper filaments. The simulation's longest edge is capped at 1100 pixels; the final presentation is capped at 2200 pixels.
+## User-controlled progression
 
-Contact is sampled at each field cell. Only pigment actually overlapping the target mask contributes to G. G stays spatially fixed and does not decay during painting or the free-pigment rinse. A 96 × 64 GPU sampling pass measures mask-weighted stain coverage and average remaining free pigment every 0.7 simulation seconds. No stroke-distance or global reveal multiplier is used.
+No coverage percentage starts a rinse. Painting reveals the quiet gift control “下一份”; the user can keep adding ink, wait indefinitely, or export. Clicking the gift is the only way to start rinsing. It stops injection, starts a water current, then a wavefront releases the fixed stain into mobile pigment from left to right. Once both free pigment and remaining stain are nearly gone, the next motif becomes available. The four motifs loop. Artwork must be loaded before the corresponding advance is enabled.
 
-At 84% weighted coverage, injection stops and the directional current clears the free pigment. The image stays stained for at least 3.5 seconds and until free pigment is below 0.006 average density. Then the attached layer is released: it advects with the current and dissipates for 4.5 seconds before the next motif begins. Fourth motif loops back to the first. Time pauses with tab visibility; resizing restarts staining of the current motif. Reduced motion slows the advection.
+The current picture is preserved across viewport buffer resizes rather than resetting progression. Time pauses when hidden. Reduced motion reduces advection speed.
 
-The background is a nearly white porcelain/water finish with very subtle broad moving highlights. There is no paper noise or fiber texture. Dense moving ink receives a restrained surface sheen. Text remains a single line. The two existing art placeholders remain; their near-white image backgrounds are removed from the pigment masks.
+## Rendering
 
-Controls: hold to release ink, drag to guide it; arrows paint, R resets. Existing PNG export and four small chapter indicators remain. No explanatory UI copy was added.
+WebGL 2, RGBA16F ping-pong fields when EXT_color_buffer_float is available, RGBA8 fallback otherwise. The mobile pigment field is capped at 2560 pixels on its long edge and 3.6 million pixels overall; presentation is capped at 3000 pixels and 2× device scaling.
 
-Validation: TypeScript/Vite production build. No automated tests or browser rendering/interaction checks were run in this update; GPU rendering remains unverified on real devices.
+Two transport passes implement bounded MacCormack correction: backward advection, reverse estimation, correction constrained to upstream cell extrema. This reduces numerical blur from repeated interpolation. Explicit diffusion is small and limited to the dilute component. Pigment injection has a compact body and narrow soft rim, instead of a broad Gaussian fog. This is still an artistic velocity/advection model, not a pressure-solved physical water simulation.
+
+R carries dilute ink; B carries denser oil-like ink; G stores stationary stain saturation. G changes only where mobile ink actually contacts the target mask. High-resolution target edges are applied during display. During a user-triggered wash, a spatial wavefront lifts G into B; the ink is transported offscreen. No timed global text fade controls progression.
+
+White porcelain/water background with restrained surface highlights; no paper/fiber texture. Original controls plus the small gift control; no tutorial copy.
+
+Build: TypeScript/Vite. Browser rendering and interaction were not run in this revision. Cross-device WebGL performance is not verified.

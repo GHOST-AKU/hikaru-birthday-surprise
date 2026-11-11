@@ -36,3 +36,11 @@ Production build runs TypeScript checking and Vite bundling. No automated tests 
 ## Shenandoah revision
 
 Rhythm now follows Paul Hardy’s consistent 4/4 transcription (80 BPM), transposed from G to D: https://www.folktunefinder.com/tunes/51319 . Tied notes remain continuous; the two eighth-note breath rests are explicit (MIDI 0 means rest). The ending remains through “cross the wide Missouri.” This replaces the previous mixed-meter transcription. River timbre uses a clear upper-register flute-like sine spectrum, 25 ms attack, sustained body, short release, quieter bass, and three low-level stereo echoes at 225/450/675 ms. No environmental recording is mixed in. Browser listening has not been verified in this revision.
+
+## Current Shenandoah score and flute revision
+
+Supersedes both earlier transcriptions above. Fixed reference: Flutetunes, D major, 4/4, quarter note = 76, https://www.flutetunes.com/tunes.php?id=107 ; visible score https://www.flutetunes.com/tunes/shenandoah.pdf and matching score MIDI https://www.flutetunes.com/tunes/shenandoah.mid . Only the traditional melody is transcribed; the site's recording and the modern bass arrangement are not bundled.
+
+All 38 melody pitches and durations were compared with track 1 of the score MIDI: exact match, 40 quarter-note beats. The 3-beat MIDI count-in is omitted. No note timings are randomized. The loop retains the final sustained D through “cross the wide Missouri.” The accompaniment remains a newly made, very quiet set of simple root/fifth supports.
+
+The flute voice is synthesized: sustained harmonic spectrum, shaped air noise, delayed gentle vibrato and short note releases. This replaces the glassy oscillator timbre. Diffuse low-level convolution room ambience replaces rhythmic delay repeats so echoes do not blur the pulse. The stored note pitches already match the flute register; there is no additional octave shift. Score comparison and the production build are completed; listening on a browser/device has not been verified.
