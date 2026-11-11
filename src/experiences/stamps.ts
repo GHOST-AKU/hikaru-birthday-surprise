@@ -1,256 +1,124 @@
 import './stamps.css';
+import { stampKinds, stampSVG, type StampKind } from './letters/stamp-art';
+import { incoming, reply } from './letters/content';
+import { saveEnvelope } from './letters/export';
 
-type StampKind = 'comfy' | 'wolf' | 'play';
-const stampKinds: StampKind[] = ['comfy', 'wolf', 'play'];
-const colors: Record<StampKind, string> = { comfy: '#64735d', wolf: '#ad4b29', play: '#434b75' };
+type Phase = 'sealed'|'opening'|'open'|'reading'|'reply'|'folding'|'stamp'|'seal'|'postmark'|'done';
+const icons={reset:'<path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/>',flip:'<path d="m8 3-5 5 5 5M3 8h10a7 7 0 1 1 0 14"/>',save:'<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>'};
+const icon=(name:keyof typeof icons)=>`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">${icons[name]}</svg>`;
+const seal='<img src="/letters/wax-h.png" alt="" draggable="false">';
+const postmark=()=>`<svg class="letter-postmark" viewBox="0 0 240 130" aria-hidden="true"><circle cx="66" cy="65" r="57"/><circle cx="66" cy="65" r="50"/><text x="66" y="40">BIRTHDAY MAIL</text><text class="postmark-love" x="66" y="73">WITH LOVE</text><path d="M39 91h54"/>${[33,47,61,75,89].map(y=>`<path d="M114 ${y}q22-12 44 0t44 0t34 0"/>`).join('')}</svg>`;
 
-function comfyArt(): string {
-  const circles = Array.from({ length: 34 }, (_, i) => `<circle cx="100" cy="79" r="${8 + i * 2.55}"/>`).join('');
-  const hills = Array.from({ length: 34 }, (_, i) => {
-    const y = 133 + i * 2.2;
-    return `<path d="M-5 ${y + 22} C23 ${y + 8},29 ${y - 17},48 ${y - 5} S76 ${y + 18},98 ${y - 3} S123 ${y - 36},141 ${y - 22} S174 ${y - 8},205 ${y - 24}"/>`;
-  }).join('');
-  return `<g fill="none" stroke="#64735d" stroke-width=".68">${circles}<circle cx="100" cy="79" r="32" fill="#f5f0df"/>${Array.from({length:18},(_,i)=>`<path d="M${70+i*1.6} ${58+i*.5}q${25+i} ${8+i*1.1} ${43-i*.6} ${14+i*1.45}"/>`).join('')}<path d="M-5 155 C23 141,29 116,48 128S76 151,98 130S123 97,141 111S174 125,205 109V210H-5Z" fill="#f5f0df"/>${hills}</g>`;
+function envelope(back:boolean,opened=false,stamped:StampKind|null=null,waxed=false,marked=false):string {
+  return `<div class="letter-envelope ${back?'is-back':'is-front'} ${opened?'is-open':''}"><div class="envelope-base"></div>${back?`<div class="envelope-lining"></div>${opened?'<button type="button" class="letter-slip" data-action="read" aria-label="Pull out the letter"><span>Dear Hikaru,</span></button>':''}<div class="envelope-side envelope-side-left"></div><div class="envelope-side envelope-side-right"></div><div class="envelope-bottom"></div><div class="envelope-flap"></div><span class="envelope-note">${waxed?'Hikaru.':'Hikaru.'}</span><span class="envelope-from">${waxed?'with love':'with love, a wolfie'}</span>${waxed?`<div class="wax-target">${seal}</div>`:''}`:`<span class="envelope-sender">Hikaru.</span><span class="envelope-recipient">To a wolfie</span><div class="letter-stamp-slot ${stamped?'is-filled':''}" aria-label="Postage stamp position">${stamped?stampSVG(stamped,'envelope'):''}</div>${marked?postmark():''}`}</div>`;
+}
+function sheet(isReply:boolean):string {
+  const letter=isReply?reply:incoming;
+  return `<article class="letter-sheet" aria-label="${isReply?'Preset reply':'Birthday letter'}"><div class="sheet-content"><h1>${letter.greeting}</h1>${letter.paragraphs.map(p=>`<p>${p}</p>`).join('')}<footer>${letter.closing}<br><span>${letter.signature}</span></footer></div></article>`;
+}
+function tool(type:'wax'|'post'):string {
+  return `<button type="button" class="letter-press-tool ${type==='post'?'is-post-tool':''}" data-action="${type==='wax'?'seal':'postmark'}" aria-label="${type==='wax'?'Press the wax seal':'Apply the postmark'}"><span class="tool-knob"></span><span class="tool-stem"></span><span class="tool-foot"></span></button>`;
 }
 
-function playArt(): string {
-  const squares = Array.from({length: 64},(_,i)=>{
-    const x=i%8, y=Math.floor(i/8);
-    return (x+y)%2===0 ? `<rect x="${x*25}" y="${y*25}" width="25" height="25"/>` : '';
-  }).join('');
-  const circles = Array.from({length:26},(_,i)=>`<circle cx="100" cy="100" r="${8+i*2.75}"/>`).join('');
-  return `<g fill="#434b75">${squares}</g><circle cx="100" cy="100" r="79" fill="#f5f0df"/><g fill="none" stroke="#434b75" stroke-width="1.2">${circles}</g><path d="M100 18C100 78 122 100 182 100C122 100 100 122 100 182C100 122 78 100 18 100C78 100 100 78 100 18Z" fill="#f5f0df" stroke="#434b75" stroke-width=".8"/><path d="M100 38C100 83 117 100 162 100C117 100 100 117 100 162C100 117 83 100 38 100C83 100 100 83 100 38Z" fill="none" stroke="#434b75" stroke-width=".7"/>`;
-}
+export function mountStamps(root:HTMLElement):()=>void {
+  root.innerHTML=`<section class="letter-experience" aria-label="Open and reply to a birthday letter"><div class="letter-stage"></div><div class="letter-actions"></div><button type="button" class="letter-reset letter-icon" aria-label="Start the letter again">${icon('reset')}</button><div class="letter-status" role="status" aria-live="polite"></div></section>`;
+  const page=root.querySelector<HTMLElement>('.letter-experience')!;
+  const stage=root.querySelector<HTMLElement>('.letter-stage')!;
+  const actions=root.querySelector<HTMLElement>('.letter-actions')!;
+  const status=root.querySelector<HTMLElement>('.letter-status')!;
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+  const timers=new Set<number>();
+  let phase:Phase='sealed',chosen:StampKind|null=null,busy=false,back=false,viewing=false,destroyed=false;
+  let ghost:HTMLElement|null=null,drag:StampKind|null=null,pointer=-1,moved=false,suppress=false;
+  let start={x:0,y:0};
+  const later=(callback:()=>void,delay:number)=>{const id=window.setTimeout(()=>{timers.delete(id);if(!destroyed)callback();},reduced.matches?30:delay);timers.add(id);};
+  const action=(label:string,name:string,disabled=false)=>`<button type="button" class="letter-action" data-action="${name}" ${disabled?'disabled':''}>${label}</button>`;
 
-function stampSVG(kind: StampKind, suffix: string, wolfHref = '/stamps-wolf.webp'): string {
-  const holes = [...Array.from({length:18},(_,i)=>`<circle cx="${i*14}" cy="0" r="4.4"/><circle cx="${i*14}" cy="300" r="4.4"/>`), ...Array.from({length:22},(_,i)=>`<circle cx="0" cy="${i*14}" r="4.4"/><circle cx="240" cy="${i*14}" r="4.4"/>`)].join('');
-  const art = kind === 'comfy' ? comfyArt() : kind === 'play' ? playArt() : `<image href="${wolfHref}" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" aria-hidden="true"><defs><mask id="stamp-cut-${suffix}"><rect width="240" height="300" fill="white"/><g fill="black">${holes}</g></mask><clipPath id="stamp-art-${suffix}"><rect width="200" height="200"/></clipPath></defs><g mask="url(#stamp-cut-${suffix})"><rect width="240" height="300" fill="#fbf7ec"/><rect x="15" y="15" width="210" height="270" fill="none" stroke="${colors[kind]}" stroke-width=".9"/><text x="120" y="38" fill="${colors[kind]}" font-family="Georgia,serif" font-weight="bold" font-size="17" letter-spacing="4.5" text-anchor="middle">HIKARU</text><path d="M15 47H225M15 251H225" stroke="${colors[kind]}" stroke-width=".9"/><g transform="translate(20 49)" clip-path="url(#stamp-art-${suffix})"><rect width="200" height="200" fill="#f5f0df"/>${art}</g><text x="120" y="275" fill="${colors[kind]}" font-family="Georgia,serif" font-size="17" font-weight="bold" letter-spacing="3.2" text-anchor="middle">${kind.toUpperCase()}</text><path d="M24 266h28m-28 4h28m-28 4h28M188 266h28m-28 4h28m-28 4h28" stroke="${colors[kind]}" stroke-width=".65"/></g></svg>`;
-}
-
-const lensIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>';
-const flipIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m8 3-5 5 5 5M3 8h10a7 7 0 1 1 0 14"/></svg>';
-const saveIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4"/></svg>';
-
-export function mountStamps(root: HTMLElement): () => void {
-  root.innerHTML = `<div class="post-experience"><h1 class="post-title">Hikaru.</h1><div class="post-collection" aria-label="Three birthday stamps">${stampKinds.map((kind,i)=>`<button class="post-stamp post-stamp-${kind}" data-stamp="${kind}" aria-label="Place ${kind} stamp on postcard" style="--stamp-angle:${[-11,-7,10][i]}deg">${stampSVG(kind,`main-${kind}`)}</button>`).join('')}</div><div class="postcard-area"><div class="postcard" role="group" aria-label="Birthday postcard"><div class="postcard-front"><div class="postcard-divider"></div><div class="postcard-address" aria-hidden="true"><i></i><i></i><i></i></div><div class="postcard-slots">${stampKinds.map(kind=>`<button class="postcard-slot" data-slot="${kind}" aria-label="Place ${kind} stamp here"></button>`).join('')}</div><div class="postmark" aria-hidden="true"><span>HIKARU</span><svg viewBox="0 0 140 70"><circle cx="40" cy="35" r="30"/><circle cx="40" cy="35" r="26"/>${[18,26,34,42,50].map(y=>`<path d="M66 ${y}q15-7 30 0t30 0"/>`).join('')}</svg></div></div><div class="postcard-back"><div class="postcard-greeting">Happy birthday,<br><em>Hikaru.</em></div><p>May this year be kind to you.</p><span class="postcard-signature">with love, a wolfie</span></div></div></div><div class="post-tools"><button class="post-tool post-inspect" aria-label="Inspect stamps with magnifying glass" aria-pressed="false">${lensIcon}</button><button class="post-tool post-flip" aria-label="Turn postcard over" disabled>${flipIcon}</button><button class="post-tool post-save" aria-label="Save postcard" hidden>${saveIcon}</button></div><div class="post-lens" hidden aria-hidden="true"><div class="post-lens-content"></div></div><div class="post-announcement" role="status" aria-live="polite"></div></div>`;
-
-  const page = root.querySelector<HTMLElement>('.post-experience')!;
-  const collection = page.querySelector<HTMLElement>('.post-collection')!;
-  const card = page.querySelector<HTMLElement>('.postcard')!;
-  const cardFront = card.querySelector<HTMLElement>('.postcard-front')!;
-  const cardBack = card.querySelector<HTMLElement>('.postcard-back')!;
-  cardBack.inert = true;
-  cardBack.setAttribute('aria-hidden', 'true');
-  const area = page.querySelector<HTMLElement>('.postcard-area')!;
-  const lens = page.querySelector<HTMLElement>('.post-lens')!;
-  const lensContent = lens.querySelector<HTMLElement>('.post-lens-content')!;
-  const inspect = page.querySelector<HTMLButtonElement>('.post-inspect')!;
-  const flip = page.querySelector<HTMLButtonElement>('.post-flip')!;
-  const save = page.querySelector<HTMLButtonElement>('.post-save')!;
-  const status = page.querySelector<HTMLElement>('.post-announcement')!;
-  const stamps = new Map(stampKinds.map(kind=>[kind,page.querySelector<HTMLButtonElement>(`[data-stamp="${kind}"]`)!]));
-  const slots = new Map(stampKinds.map(kind=>[kind,page.querySelector<HTMLButtonElement>(`[data-slot="${kind}"]`)!]));
-  const placed = new Set<StampKind>();
-  let inspecting = false;
-  let flipped = false;
-  let activeLens: StampKind | null = null;
-  let suppressClick = false;
-  let ghost: HTMLElement | null = null;
-  let draggedKind: StampKind | null = null;
-  let start = {x:0,y:0};
-  let pointer = -1;
-  let dragDistance = 0;
-  let destroyed = false;
-
-  const wolfData = fetch('/stamps-wolf.webp').then(response=> {
-    if (!response.ok) throw new Error('Stamp artwork unavailable');
-    return response.blob();
-  }).then(blob=>new Promise<string>((resolve,reject)=> {
-    const reader = new FileReader(); reader.onload=()=>resolve(String(reader.result)); reader.onerror=reject; reader.readAsDataURL(blob);
-  }));
-  void wolfData.catch(()=>{});
-
-  function hideLens(): void { lens.hidden = true; activeLens = null; }
-
-  function showLens(kind: StampKind, clientX?: number, clientY?: number): void {
-    if (!inspecting || placed.has(kind)) return;
-    const stamp = stamps.get(kind)!;
-    const rect = stamp.getBoundingClientRect();
-    const x = clientX ?? rect.x + rect.width * .5;
-    const y = clientY ?? rect.y + rect.height * .48;
-    const diameter = window.innerWidth < 600 ? 140 : 190;
-    if (activeLens !== kind) {
-      lensContent.innerHTML = stampSVG(kind, `lens-${kind}`);
-      activeLens = kind;
+  function render(focus=true):void {
+    page.dataset.phase=phase;page.classList.toggle('is-viewing',viewing);
+    if(phase==='sealed'||phase==='opening'||phase==='open'){
+      stage.innerHTML=envelope(true,phase!=='sealed')+(phase!=='open'?`<button class="incoming-wax ${phase==='opening'?'is-broken':''}" data-action="open" aria-label="Break the wax seal" ${busy?'disabled':''}><span class="seal-half seal-left">${seal}</span><span class="seal-half seal-right">${seal}</span></button>`:'');
+      actions.innerHTML=action(phase==='open'?'Read':'Open',phase==='open'?'read':'open',busy);
+    }else if(phase==='reading'||phase==='reply'||phase==='folding'||viewing){
+      stage.innerHTML=`<div class="sheet-envelope">${envelope(true,true)}</div>${sheet(phase!=='reading')}`;
+      actions.innerHTML=viewing?action('Back','close'):action(phase==='reading'?'Reply':'Fold',phase==='reading'?'reply':'fold',busy);
+    }else{
+      const rear=phase==='seal'||(phase==='done'&&back);
+      stage.innerHTML=envelope(rear,false,chosen,rear&&phase==='done',phase==='done'&&!back);
+      if(phase==='stamp'){
+        stage.innerHTML+=`<div class="letter-postage" role="group" aria-label="Choose a postage stamp">${stampKinds.map((kind,i)=>`<button type="button" class="letter-loose-stamp" data-kind="${kind}" aria-label="Use the ${kind} stamp" style="--tilt:${[-9,5,-5][i]}deg">${stampSVG(kind,`loose-${kind}`)}</button>`).join('')}</div>`;
+        actions.innerHTML=action('Stamp','stamp');
+      }else if(phase==='seal'){
+        stage.innerHTML+='<div class="wet-wax" aria-hidden="true"></div>'+tool('wax');actions.innerHTML=action('Seal','seal');
+      }else if(phase==='postmark'){
+        stage.innerHTML+=tool('post');actions.innerHTML=action('Postmark','postmark');
+      }else actions.innerHTML=action('Read reply','view')+`<button type="button" class="letter-icon" data-action="flip" aria-label="${back?'Show address':'Show wax seal'}">${icon('flip')}</button><button type="button" class="letter-icon" data-action="save" aria-label="Save sealed letter">${icon('save')}</button>`;
     }
-    const zoom = 2.35;
-    const baseWidth = stamp.offsetWidth;
-    const baseHeight = stamp.offsetHeight;
-    const matrix = new DOMMatrix(getComputedStyle(stamp).transform);
-    const angle = Math.atan2(matrix.b, matrix.a);
-    const dx = x - rect.left - rect.width / 2;
-    const dy = y - rect.top - rect.height / 2;
-    const fractionX = Math.max(0, Math.min(1, .5 + (dx * Math.cos(angle) + dy * Math.sin(angle)) / baseWidth));
-    const fractionY = Math.max(0, Math.min(1, .5 + (-dx * Math.sin(angle) + dy * Math.cos(angle)) / baseHeight));
-    lens.style.width = `${diameter}px`; lens.style.height = `${diameter}px`;
-    lens.style.left = `${Math.max(8,Math.min(innerWidth-diameter-8,x-diameter*.5))}px`;
-    lens.style.top = `${Math.max(8,Math.min(innerHeight-diameter-8,y-diameter*.5))}px`;
-    lensContent.style.width = `${baseWidth*zoom}px`;
-    lensContent.style.transform = `translate(${diameter/2-fractionX*baseWidth*zoom}px,${diameter/2-fractionY*baseHeight*zoom}px)`;
-    lens.hidden = false;
+    if(focus) (actions.querySelector('button:not([disabled])') as HTMLButtonElement|null)?.focus({preventScroll:true});
   }
-
-  function place(kind: StampKind): void {
-    if (placed.has(kind)) return;
-    placed.add(kind); hideLens();
-    stamps.get(kind)!.classList.add('is-posted');
-    stamps.get(kind)!.disabled = true;
-    const slot = slots.get(kind)!;
-    slot.innerHTML = stampSVG(kind, `placed-${kind}`);
-    slot.classList.add('is-filled');
-    slot.setAttribute('aria-label', `Remove ${kind} stamp`);
-    status.textContent = `${kind} stamp placed.`;
-    if (placed.size === 3) {
-      flip.disabled = false; save.hidden = false;
-      inspecting = false; inspect.disabled = true;
-      inspect.setAttribute('aria-pressed', 'false');
-      collection.classList.remove('is-inspecting');
-      card.classList.add('is-complete');
-      status.textContent = 'All stamps placed. The postcard is ready to turn over.';
-      flip.focus({preventScroll:true});
+  function change(next:Phase):void{phase=next;busy=false;render();}
+  function open():void{
+    if(phase!=='sealed'||busy)return;busy=true;phase='opening';render(false);status.textContent='The seal breaks. The envelope opens.';later(()=>change('open'),1100);
+  }
+  function place(kind:StampKind):void {
+    if(phase!=='stamp'||busy)return;chosen=kind;busy=true;
+    const slot=stage.querySelector('.letter-stamp-slot')!;slot.innerHTML=stampSVG(kind,'placed');slot.classList.add('is-filled','just-placed');
+    stage.querySelectorAll<HTMLButtonElement>('.letter-loose-stamp').forEach(b=>{b.disabled=true;b.classList.toggle('is-used',b.dataset.kind===kind);});
+    actions.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent=`${kind} stamp attached.`;
+    later(()=>{stage.classList.add('turning');later(()=>{stage.classList.remove('turning');change('seal');},380);},650);
+  }
+  function press(type:'seal'|'postmark'):void {
+    if(phase!==type||busy)return;busy=true;actions.querySelectorAll('button').forEach(b=>b.disabled=true);
+    const handle=stage.querySelector<HTMLButtonElement>('.letter-press-tool')!;handle.disabled=true;
+    const env=stage.querySelector<HTMLElement>('.letter-envelope')!;
+    const rect=handle.getBoundingClientRect(),target=(type==='seal'?stage.querySelector('.wet-wax')!:stage.querySelector('.letter-stamp-slot')!).getBoundingClientRect();
+    const x=target.x+target.width*.5-(rect.x+rect.width*.5);const y=target.y+target.height*.6-(rect.y+rect.height*.85);
+    if(!reduced.matches)handle.animate([{transform:'translate(0,0) rotate(-12deg)',opacity:1},{transform:`translate(${x}px,${y-30}px) rotate(0deg)`,offset:.38,opacity:1},{transform:`translate(${x}px,${y+8}px) rotate(0deg)`,offset:.58,opacity:1},{transform:`translate(${x}px,${y-55}px) rotate(0deg)`,offset:.88,opacity:1},{transform:`translate(${x+60}px,${y-90}px) rotate(8deg)`,opacity:0}],{duration:1300,easing:'cubic-bezier(.35,0,.2,1)',fill:'forwards'});
+    later(()=>{
+      if(type==='seal'){stage.querySelector('.wet-wax')?.classList.add('is-set');env.insertAdjacentHTML('beforeend',`<div class="wax-target wax-fresh">${seal}</div>`);status.textContent='The wax carries your H.';}
+      else {env.insertAdjacentHTML('beforeend',postmark());status.textContent='Your reply is stamped and sealed.';}
+    },760);
+    later(()=>{if(type==='seal'){stage.classList.add('turning');later(()=>{stage.classList.remove('turning');change('postmark');},380);}else change('done');},1450);
+  }
+  async function perform(name:string):Promise<void>{
+    if(busy)return;
+    if(name==='open')open();
+    if(name==='read'&&phase==='open'){status.textContent='A birthday letter for Hikaru.';change('reading');}
+    if(name==='reply'&&phase==='reading'){status.textContent='A preset reply to a wolfie.';change('reply');}
+    if(name==='fold'&&phase==='reply'){busy=true;phase='folding';render(false);later(()=>change('stamp'),850);}
+    if(name==='stamp')place('wolf');
+    if(name==='seal'||name==='postmark')press(name);
+    if(name==='view'&&phase==='done'){viewing=true;render();}
+    if(name==='close'){viewing=false;render();}
+    if(name==='flip'&&phase==='done'){back=!back;stage.classList.add('turning');busy=true;later(()=>{stage.classList.remove('turning');busy=false;render();},380);}
+    if(name==='save'&&phase==='done'&&chosen){
+      const button=actions.querySelector<HTMLButtonElement>('[data-action="save"]')!;button.disabled=true;
+      try{await saveEnvelope(chosen,back);}catch{status.textContent='Could not save. Please try again.';}finally{button.disabled=false;}
     }
   }
-
-  function remove(kind: StampKind): void {
-    placed.delete(kind);
-    stamps.get(kind)!.classList.remove('is-posted');
-    stamps.get(kind)!.disabled = false;
-    inspect.disabled = false;
-    const slot = slots.get(kind)!;
-    slot.innerHTML = ''; slot.classList.remove('is-filled');
-    slot.setAttribute('aria-label', `Place ${kind} stamp here`);
-    card.classList.remove('is-complete');
-    flip.disabled = true; save.hidden = true;
-    status.textContent = `${kind} stamp removed.`;
-  }
-
-  inspect.addEventListener('click',()=> {
-    inspecting = !inspecting;
-    inspect.setAttribute('aria-pressed',String(inspecting));
-    collection.classList.toggle('is-inspecting',inspecting);
-    if (!inspecting) hideLens();
-    else {
-      const kind = stampKinds.find(item=>!placed.has(item));
-      if (kind) { stamps.get(kind)!.focus({preventScroll:true}); showLens(kind); }
-    }
+  const click=(event:MouseEvent)=>{
+    if(suppress)return;const target=(event.target as Element).closest<HTMLElement>('[data-action],[data-kind]');
+    if(!target)return;if(target.dataset.kind)place(target.dataset.kind as StampKind);else void perform(target.dataset.action!);
+  };
+  stage.addEventListener('click',click);actions.addEventListener('click',click);
+  function cleanDrag():void{ghost?.remove();ghost=null;stage.classList.remove('is-dropping');pointer=-1;drag=null;moved=false;}
+  stage.addEventListener('pointerdown',event=>{
+    const button=(event.target as Element).closest<HTMLElement>('[data-kind]');if(!button||phase!=='stamp'||busy||event.button!==0)return;
+    pointer=event.pointerId;drag=button.dataset.kind as StampKind;start={x:event.clientX,y:event.clientY};moved=false;stage.setPointerCapture(pointer);
   });
-
-  for (const kind of stampKinds) {
-    const stamp = stamps.get(kind)!;
-    stamp.addEventListener('click',()=> {
-      if (suppressClick) { suppressClick=false; return; }
-      if (inspecting) showLens(kind); else place(kind);
-    });
-    stamp.addEventListener('focus',()=>{ if(inspecting) showLens(kind); });
-    stamp.addEventListener('pointerdown',event=> {
-      if (event.button !== 0 || placed.has(kind)) return;
-      if (inspecting) { showLens(kind,event.clientX,event.clientY); stamp.setPointerCapture(event.pointerId); return; }
-      pointer=event.pointerId; draggedKind=kind; start={x:event.clientX,y:event.clientY}; dragDistance=0;
-      stamp.setPointerCapture(event.pointerId);
-    });
-    stamp.addEventListener('pointermove',event=> {
-      if (inspecting) { showLens(kind,event.clientX,event.clientY); return; }
-      if (pointer !== event.pointerId || draggedKind !== kind) return;
-      dragDistance=Math.hypot(event.clientX-start.x,event.clientY-start.y);
-      if (dragDistance<6) return;
-      if (!ghost) {
-        ghost=document.createElement('div'); ghost.className='post-drag-ghost'; ghost.innerHTML=stampSVG(kind,`ghost-${kind}`);
-        ghost.style.width=`${stamp.offsetWidth}px`; document.body.append(ghost); stamp.classList.add('is-dragging');
-      }
-      ghost.style.left=`${event.clientX-stamp.offsetWidth/2}px`; ghost.style.top=`${event.clientY-stamp.offsetHeight/2}px`;
-      const rect=area.getBoundingClientRect();
-      area.classList.toggle('is-drop-target',event.clientX>rect.left&&event.clientX<rect.right&&event.clientY>rect.top&&event.clientY<rect.bottom);
-    });
-    stamp.addEventListener('pointerup',event=> {
-      if (inspecting) return;
-      if(pointer!==event.pointerId) return;
-      if(dragDistance>6) {
-        suppressClick=true;
-        window.setTimeout(()=>{ suppressClick=false; },0);
-        const rect=area.getBoundingClientRect();
-        if(event.clientX>rect.left&&event.clientX<rect.right&&event.clientY>rect.top&&event.clientY<rect.bottom) place(kind);
-      }
-      pointer=-1; draggedKind=null; ghost?.remove(); ghost=null;
-      stamp.classList.remove('is-dragging'); area.classList.remove('is-drop-target');
-    });
-    stamp.addEventListener('pointercancel',()=> {
-      pointer=-1; draggedKind=null; ghost?.remove(); ghost=null;
-      stamp.classList.remove('is-dragging'); area.classList.remove('is-drop-target');
-    });
-    stamp.addEventListener('pointerleave',()=> { if(pointer===-1) hideLens(); });
-    slots.get(kind)!.addEventListener('click',()=> { if(placed.has(kind)) remove(kind); else place(kind); });
-  }
-
-  flip.addEventListener('click',()=> {
-    if(placed.size!==3) return;
-    flipped=!flipped;
-    card.classList.toggle('is-flipped',flipped);
-    flip.setAttribute('aria-label',flipped?'Show stamps':'Turn postcard over');
-    cardFront.inert=flipped;
-    cardBack.inert=!flipped;
-    cardFront.setAttribute('aria-hidden', String(flipped));
-    cardBack.setAttribute('aria-hidden', String(!flipped));
-    status.textContent=flipped?'Happy birthday, Hikaru. May this year be kind to you. With love, a wolfie.':'Postcard stamp side.';
-    hideLens();
+  stage.addEventListener('pointermove',event=>{
+    if(pointer!==event.pointerId||!drag)return;if(Math.hypot(event.clientX-start.x,event.clientY-start.y)<7&&!moved)return;moved=true;
+    if(!ghost){ghost=document.createElement('div');ghost.className='letter-drag-ghost';ghost.innerHTML=stampSVG(drag,'drag');document.body.append(ghost);}
+    ghost.style.left=`${event.clientX}px`;ghost.style.top=`${event.clientY}px`;
+    const rect=stage.querySelector('.letter-envelope')!.getBoundingClientRect();stage.classList.toggle('is-dropping',event.clientX>rect.left&&event.clientX<rect.right&&event.clientY>rect.top&&event.clientY<rect.bottom);
   });
-
-  save.addEventListener('click',async()=> {
-    if(placed.size!==3) return;
-    save.disabled=true;
-    try {
-      const wolfHref=await wolfData;
-      const canvas=document.createElement('canvas'); canvas.width=1600; canvas.height=760;
-      const context=canvas.getContext('2d'); if(!context) throw new Error('Canvas unavailable');
-      context.fillStyle='#fbf7ec'; context.fillRect(0,0,1600,760);
-      context.strokeStyle='#c3b79e'; context.lineWidth=1.5;
-      const images=await Promise.all(stampKinds.map(async kind=>{
-        const url=URL.createObjectURL(new Blob([stampSVG(kind,`download-${kind}`,wolfHref)],{type:'image/svg+xml'}));
-        const image=new Image(); image.src=url; await image.decode(); URL.revokeObjectURL(url); return image;
-      }));
-      if(flipped) {
-        context.fillStyle='#ad4b29'; context.font='italic 96px Georgia, serif';
-        context.fillText('Happy birthday,',90,225); context.fillText('Hikaru.',90,335);
-        context.fillStyle='#605846'; context.font='28px Georgia, serif';
-        context.fillText('May this year be kind to you.',95,445);
-        context.font='italic 23px Georgia, serif'; context.fillText('with love, a wolfie',95,630);
-        images.forEach((image,index)=>context.drawImage(image,950+index*190,245,165,206));
-      } else {
-        context.beginPath(); context.moveTo(780,55); context.lineTo(780,705); context.stroke();
-        [480,560,640].forEach(y=>{context.beginPath();context.moveTo(875,y);context.lineTo(1500,y);context.stroke();});
-        images.forEach((image,index)=>context.drawImage(image,1060+index*145,65,125,156));
-        context.save();
-        context.translate(1120,280);
-        context.rotate(-16*Math.PI/180);
-        context.strokeStyle='#8c806b'; context.fillStyle='#8c806b'; context.lineWidth=1.3;
-        [61,53].forEach(radius=>{context.beginPath();context.arc(0,0,radius,0,Math.PI*2);context.stroke();});
-        for (const y of [-34,-18,-2,14,30]) {
-          context.beginPath(); context.moveTo(53,y);
-          context.bezierCurveTo(80,y-14,101,y+14,130,y);
-          context.bezierCurveTo(157,y-14,178,y+14,207,y); context.stroke();
-        }
-        context.font='15px Courier New, monospace'; context.textAlign='center';
-        context.fillText('HIKARU',0,5); context.restore();
-      }
-      const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Export failed')),'image/png'));
-      if(destroyed) return;
-      const url=URL.createObjectURL(blob); const anchor=document.createElement('a');
-      anchor.href=url; anchor.download='hikaru-postcard.png'; document.body.append(anchor); anchor.click(); anchor.remove(); window.setTimeout(()=>URL.revokeObjectURL(url),60000);
-    } catch { status.textContent='Could not save the postcard. Please try again.'; }
-    finally { save.disabled=false; }
+  stage.addEventListener('pointerup',event=>{
+    if(pointer!==event.pointerId)return;const kind=drag;const dropped=moved&&stage.classList.contains('is-dropping');const clicked=!moved;
+    suppress=true;later(()=>{suppress=false;},160);cleanDrag();if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);
+    if(kind&&(dropped||clicked))place(kind);
   });
-
-  const onKey=(event:KeyboardEvent)=> { if(event.key==='Escape'){ inspecting=false; inspect.setAttribute('aria-pressed','false');collection.classList.remove('is-inspecting');hideLens(); } };
-  document.addEventListener('keydown',onKey);
-  return ()=> { destroyed=true; document.removeEventListener('keydown',onKey); ghost?.remove(); };
+  stage.addEventListener('pointercancel',cleanDrag);stage.addEventListener('lostpointercapture',()=>{if(pointer!==-1)cleanDrag();});
+  root.querySelector('.letter-reset')!.addEventListener('click',()=>{timers.forEach(clearTimeout);timers.clear();cleanDrag();phase='sealed';chosen=null;busy=false;viewing=false;back=false;suppress=false;stage.classList.remove('turning');status.textContent='A letter for Hikaru.';render();});
+  render(false);
+  return ()=>{destroyed=true;timers.forEach(clearTimeout);cleanDrag();};
 }

@@ -3,7 +3,7 @@ import './navigation.css';
 const experiences = [
   { path: '/instrument', name: '仪器', en: 'PRESS' },
   { path: '/cover', name: '封面', en: 'COVER' },
-  { path: '/stamps', name: '邮票', en: 'POST' },
+  { path: '/stamps', name: '信件', en: 'POST' },
   { path: '/sound', name: '声音', en: 'PLAY' }
 ];
 
