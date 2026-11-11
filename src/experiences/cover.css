@@ -1,10 +1,10 @@
-body[data-experience='cover'] { margin: 0; background: #f7f3e9; color: #252620; overflow: hidden; }
+body[data-experience='ink'] { margin: 0; background: #fff; color: #252620; overflow: hidden; }
 .cover-experience { position: fixed; inset: 0; overflow: hidden; font-family: Arial, sans-serif; }
 .cover-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; outline: none; }
 .cover-canvas:focus-visible { outline: 1px solid #656358; outline-offset: -5px; }
 .cover-tools { position: absolute; left: max(22px,env(safe-area-inset-left)); bottom: max(24px,env(safe-area-inset-bottom)); display: flex; gap: 12px; }
-.cover-tool { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #35352e88; border-radius: 50%; background: #f8f4e9a8; color: inherit; cursor: pointer; backdrop-filter: blur(8px); transition: background .2s,transform .2s; -webkit-tap-highlight-color: transparent; }
-.cover-tool:hover { background: #fffaf0; } .cover-tool:active { transform: scale(.93); }
+.cover-tool { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #697b822e; border-radius: 50%; background: #ffffffb8; color: inherit; cursor: pointer; backdrop-filter: blur(8px); transition: background .2s,transform .2s; -webkit-tap-highlight-color: transparent; }
+.cover-tool:hover { background: #fff; } .cover-tool:active { transform: scale(.93); }
 .cover-tool svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
 .cover-tool:focus-visible { outline: 2px solid #68694e; outline-offset: 4px; }
 .cover-tool:disabled { opacity: .4; cursor: wait; }

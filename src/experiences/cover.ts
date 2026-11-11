@@ -5,7 +5,7 @@ const ART = ['/ink/calligraphy-placeholder.png', '/ink/portrait-placeholder.png'
 const NAMES = ['HIKARU', 'Happy birthday', 'Calligraphy', 'Portrait'];
 
 export function mountCover(root: HTMLElement): () => void {
-  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru ink canvas"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Drag to paint. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
+  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru — Inkflow"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Press to release ink; drag to guide the current. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
   const canvas=root.querySelector<HTMLCanvasElement>('canvas')!;
   const status=root.querySelector<HTMLElement>('.cover-status')!;
   const dots=[...root.querySelectorAll('.cover-chapters span')];
@@ -16,7 +16,7 @@ export function mountCover(root: HTMLElement): () => void {
   const images: (HTMLImageElement|null)[]=[null,null];
   let engine:InkRenderer;
   try { engine=new InkRenderer(canvas); } catch { status.textContent='This browser could not start the ink canvas. Try a browser with WebGL enabled.'; canvas.setAttribute('aria-label',status.textContent);return ()=>{}; }
-  let stage=0,work=0,progress=0,readyAt=0,extra=0,transitionAt=0,previousStage=-1;
+  let stage=0,progress=0,mode=0,phaseTime=0,clock=0,lastMeasure=0;
   let frame=0,lastTime=performance.now(),disposed=false,pointer:number|null=null;
   let last={x:.5,y:.5},keyboard={x:.3,y:.45};
   let queue:Stroke[]=[];
@@ -34,30 +34,32 @@ export function mountCover(root: HTMLElement): () => void {
         c.font=`700 ${font}px Georgia, 'Times New Roman', serif`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#131510';c.fillText(text,width*.5,height*.5);
       }else if(images[i-2]){
         const image=images[i-2]!;const scale=Math.min(width*.84/image.width,height*.78/image.height);const w=image.width*scale,h=image.height*scale;c.drawImage(image,(width-w)/2,(height-h)/2,w,h);
+        const pixels=c.getImageData(0,0,width,height);
+        for(let n=0;n<pixels.data.length;n+=4){
+          const light=(pixels.data[n]*.2126+pixels.data[n+1]*.7152+pixels.data[n+2]*.0722)/255;
+          const value=Math.round(255*(1-Math.max(0,Math.min(1,(1-light-.1)/.85))));
+          pixels.data[n]=pixels.data[n+1]=pixels.data[n+2]=value;
+        }
+        c.putImageData(pixels,0,0);
       }
     });
-    engine.setTargets(targets[stage],previousStage<0?blank:targets[previousStage]);
+    engine.setTargets(targets[stage],blank);
   }
   function resize():void{
     const box=canvas.getBoundingClientRect();size={width:box.width,height:box.height};
-    const ratio=Math.min(devicePixelRatio||1,1.6,1700/Math.max(box.width,box.height));engine.resize(Math.max(1,Math.round(box.width*ratio)),Math.max(1,Math.round(box.height*ratio)));buildTargets();
+    const ratio=Math.min(devicePixelRatio||1,2,2200/Math.max(box.width,box.height));
+    const width=Math.max(1,Math.round(box.width*ratio)),height=Math.max(1,Math.round(box.height*ratio));
+    if(width===canvas.width&&height===canvas.height)return;
+    engine.resize(width,height);mode=0;progress=0;phaseTime=clock;buildTargets();
   }
   function updateChapter():void{dots.forEach((dot,i)=>{dot.classList.toggle('is-active',i===stage);dot.classList.toggle('is-done',i<stage);});canvas.dataset.chapter=String(stage+1);status.textContent=NAMES[stage];}
-  function reset():void{stage=0;work=0;progress=0;readyAt=0;extra=0;previousStage=-1;transitionAt=0;queue=[];engine.reset();buildTargets();updateChapter();}
+  function reset():void{stage=0;progress=0;mode=0;phaseTime=clock;queue=[];engine.reset();buildTargets();updateChapter();}
   function paint(next:{x:number;y:number},pressure=.5):void{
     const distance=Math.hypot((next.x-last.x)*size.width,(next.y-last.y)*size.height);
-    const unit=distance/Math.hypot(size.width,size.height);
     if(distance>.5){
-      if(!transitionAt){
-        work+=Math.min(.2,unit);progress=Math.min(1,work/5.5);
-        if(progress>=.92){progress=1;if(!readyAt){readyAt=performance.now();extra=0;}else extra+=unit;}
-        if(readyAt&&performance.now()-readyAt>1600&&extra>.65&&stage<3&&(stage<1||images[stage-1])){
-          previousStage=stage;stage++;work=0;progress=0;readyAt=0;extra=0;transitionAt=performance.now();engine.next();engine.setTargets(targets[stage],targets[previousStage]);updateChapter();
-        }
-      }
-      queue.push({px:last.x,py:last.y,x:next.x,y:next.y,pressure:Math.max(.024,Math.min(.07,(36+pressure*20-distance*.16)/size.height))});
+      queue.push({px:last.x,py:last.y,x:next.x,y:next.y,pressure:Math.max(.012,Math.min(.045,(17+pressure*17-distance*.08)/size.height))});
       if(queue.length>24)queue.splice(0,queue.length-24);
-    }else queue.push({px:next.x,py:next.y,x:next.x,y:next.y,pressure:Math.min(.07,38/size.height)});
+    }else queue.push({px:next.x,py:next.y,x:next.x,y:next.y,pressure:Math.min(.045,26/size.height)});
     last=next;
   }
   function point(event:PointerEvent):{x:number;y:number}{const rect=canvas.getBoundingClientRect();return {x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height};}
@@ -66,9 +68,20 @@ export function mountCover(root: HTMLElement): () => void {
   const up=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;if(canvas.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer);pointer=null;};
   function animate(now:number):void{
     if(disposed)return;if(!queue.length&&now-lastTime<32){frame=requestAnimationFrame(animate);return;}const dt=Math.min(.035,Math.max(.001,(now-lastTime)/1000));lastTime=now;
-    let fade=0;if(transitionAt){fade=Math.max(0,1-(now-transitionAt)/2000);if(fade===0){transitionAt=0;previousStage=-1;}}
+    clock+=dt;
+    if(pointer!==null&&!queue.length)paint(last,.5);
+    if(clock-lastMeasure>.7){
+      const measured=engine.coverage();progress=measured.coverage;lastMeasure=clock;
+      if(mode===0&&progress>.84){mode=1;phaseTime=clock;status.textContent='The current carries the loose ink away.';}
+      else if(mode===1&&clock-phaseTime>3.5&&measured.ink<.006){mode=2;phaseTime=clock;status.textContent='The water washes the image away.';}
+    }
+    if(mode===2&&clock-phaseTime>4.5){
+      const next=(stage+1)%4;
+      if(next<2||images[next-2]){stage=next;mode=0;phaseTime=clock;progress=0;queue=[];engine.next();engine.setTargets(targets[stage],blank);updateChapter();}
+    }
     const strokes=queue.splice(0,Math.min(3,queue.length));
-    if(strokes.length){strokes.forEach((stroke,i)=>engine.draw(now/1000,dt/strokes.length,progress,fade,stroke,reduced.matches,i===strokes.length-1));}else engine.draw(now/1000,dt,progress,fade,null,reduced.matches);
+    if(strokes.length){strokes.forEach((stroke,i)=>engine.draw(clock,dt/strokes.length,mode,0,stroke,reduced.matches,i===strokes.length-1));}else engine.draw(clock,dt,mode,0,null,reduced.matches);
+    canvas.dataset.phase=['stain','clear-water','release'][mode];
     canvas.dataset.progress=progress.toFixed(3);frame=requestAnimationFrame(animate);
   }
   const pause=()=>{cancelAnimationFrame(frame);pointer=null;queue=[];};

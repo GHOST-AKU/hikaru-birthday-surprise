@@ -2,12 +2,14 @@ import './navigation.css';
 
 const experiences = [
   { path: '/instrument', name: '仪器', en: 'PRESS' },
-  { path: '/cover', name: '封面', en: 'COVER' },
+  { path: '/ink', name: '墨流', en: 'INKFLOW' },
   { path: '/stamps', name: '信件', en: 'POST' },
   { path: '/sound', name: '声音', en: 'PLAY' }
 ];
 
-const path = location.pathname.replace(/\/+$/, '') || '/instrument';
+const requestedPath = location.pathname.replace(/\/+$/, '') || '/instrument';
+const path = requestedPath === '/cover' ? '/ink' : requestedPath;
+if(requestedPath === '/cover') history.replaceState(null,'','/ink'+location.search+location.hash);
 const current = experiences.find(item => item.path === path);
 const root = document.querySelector<HTMLElement>('#app')!;
 
@@ -46,10 +48,11 @@ if (!current) {
     await import('./instrument');
   } else {
     const modules = import.meta.glob('./experiences/*.ts');
-    const load = modules[`./experiences${path}.ts`];
+    const modulePath = path === '/ink' ? '/cover' : path;
+    const load = modules[`./experiences${modulePath}.ts`];
     if (load) {
       const module = await load() as Record<string, (element: HTMLElement) => unknown>;
-      const name = `mount${path[1].toUpperCase()}${path.slice(2)}`;
+      const name = `mount${modulePath[1].toUpperCase()}${modulePath.slice(2)}`;
       module[name](root);
     }
   }

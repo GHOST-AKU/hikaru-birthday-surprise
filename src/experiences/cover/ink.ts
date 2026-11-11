@@ -5,37 +5,65 @@ float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float fbm(vec2 p){float n=0.;float a=.5;for(int i=0;i<4;i++){n+=a*noise(p);p=p*2.03+13.7;a*=.5;}return n;}
 `;
-const flow = `precision highp float; varying vec2 uv; uniform sampler2D field; uniform vec2 pixel; uniform float aspect,time,dt,down,radius,clearReveal,rinse; uniform vec4 stroke; uniform vec4 vortices[8]; ${noise}
+const flow = `precision highp float; varying vec2 uv;
+uniform sampler2D field,target; uniform vec2 pixel; uniform float aspect,time,dt,down,radius,mode;
+uniform vec4 stroke; uniform vec4 vortices[8]; ${noise}
 void main(){
  vec2 scale=vec2(aspect,1.);vec2 p=uv*scale;
- vec2 q=p*3.6+vec2(time*.035,-time*.022);
- vec2 velocity=vec2(fbm(q+vec2(0,.015))-fbm(q-vec2(0,.015)),fbm(q-vec2(.015,0))-fbm(q+vec2(.015,0)))*1.15;
- for(int i=0;i<8;i++){vec2 d=p-vortices[i].xy*scale;float r=dot(d,d);velocity+=vec2(-d.y,d.x)*vortices[i].z*.004/(r+.0025)*exp(-r*7.)*vortices[i].w;}
- vec2 back=clamp(uv-velocity*dt/scale,vec2(0.),vec2(1.));
- vec4 f=texture2D(field,back);float around=(texture2D(field,back+vec2(pixel.x,0)).r+texture2D(field,back-vec2(pixel.x,0)).r+texture2D(field,back+vec2(0,pixel.y)).r+texture2D(field,back-vec2(0,pixel.y)).r)*.25;
- f.r=mix(f.r,around,.025)*pow(.9995,dt*60.);f.g*=1.-clearReveal;f.r*=rinse;
- vec2 a=stroke.xy*scale,b=stroke.zw*scale;vec2 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),.000001),0.,1.);float d=length(p-a-ab*t);
- float grain=fbm(p*110.+time*.03);float edge=radius*(.65+grain*.65);vec2 direction=normalize(ab+vec2(.00001));float bristle=noise(vec2(dot(p-a,vec2(-direction.y,direction.x))*900.,dot(p-a,direction)*70.));float wash=((1.-smoothstep(edge*.28,edge,d))*(.28+bristle*.9)+exp(-d*d/(edge*edge*2.))* .10)*down;
- f.r=clamp(f.r+wash*(.7+grain*.35)*(1.-f.r*.7),0.,1.);f.g=max(f.g,(1.-smoothstep(edge*.4,edge*2.6,d))*down);f.b=max(f.b*.98,wash);
- gl_FragColor=vec4(f.rgb,1.);
+ vec2 q=p*2.8+vec2(time*.035,-time*.024);
+ vec2 velocity=vec2(.018+.012*sin(p.y*5.+time*.2),.008*cos(p.x*4.-time*.15));
+ velocity+=vec2(fbm(q+vec2(0,.02))-fbm(q-vec2(0,.02)),fbm(q-vec2(.02,0))-fbm(q+vec2(.02,0)))*1.4;
+ for(int i=0;i<8;i++){vec2 d=p-vortices[i].xy*scale;float r=dot(d,d);velocity+=vec2(-d.y,d.x)*vortices[i].z*.008/(r+.004)*exp(-r*10.)*vortices[i].w;}
+ vec2 drag=(stroke.zw-stroke.xy)*scale;
+ velocity+=drag/max(dt,.008)*.12*exp(-dot(p-stroke.zw*scale,p-stroke.zw*scale)/.025)*down;
+ velocity+=vec2(.13,.035)*step(.5,mode);
+ vec2 back=uv-velocity*dt/scale;
+ vec4 f=texture2D(field,clamp(back,vec2(0.),vec2(1.)));
+ if(back.x<0.||back.y<0.||back.x>1.||back.y>1.)f=vec4(0.);
+ float around=(texture2D(field,back+vec2(pixel.x,0)).r+texture2D(field,back-vec2(pixel.x,0)).r+texture2D(field,back+vec2(0,pixel.y)).r+texture2D(field,back-vec2(0,pixel.y)).r)*.25;
+ float rinse=step(.5,mode);
+ f.r=max(0.,mix(f.r,around,min(.24,dt*4.))*exp(-dt*(.14+rinse*.7))-dt*.065);
+ f.b=max(0.,f.b*exp(-dt*(.22+rinse*1.1))-dt*.065);
+ vec2 a=stroke.xy*scale,b=stroke.zw*scale,ab=b-a;
+ float t=clamp(dot(p-a,ab)/max(dot(ab,ab),.000001),0.,1.);
+ float d=length(p-a-ab*t);float edge=radius*(.87+.22*noise(p*55.+time*.03));
+ float droplet=exp(-d*d/(edge*edge*.7))*down;
+ float halo=exp(-d*d/(edge*edge*2.7))*down;
+ f.r=clamp(f.r+halo*.22,0.,1.);f.b=clamp(f.b+droplet*.48,0.,1.);
+ float mask=1.-texture2D(target,uv).r;
+ float attached=texture2D(field,uv).g;
+ if(mode<1.5){attached=min(mask,attached+max(0.,max(f.r,f.b)-.025)*dt*6.*mask);}
+ else {attached=max(0.,f.g*exp(-dt*1.2)-dt*.07);}
+ gl_FragColor=vec4(f.r,attached,f.b,1.);
 }`;
-const render = `precision highp float; varying vec2 uv; uniform sampler2D field,target,previous; uniform vec2 resolution; uniform float progress,previousFade,time; ${noise}
+const render = `precision highp float; varying vec2 uv;
+uniform sampler2D field,target;uniform vec2 resolution;uniform float mode,time; ${noise}
 void main(){
- vec4 f=texture2D(field,uv);float paper=noise(uv*resolution*.075);float fiber=hash(floor(uv*resolution));
- vec3 base=vec3(.969,.955,.921)+(paper-.5)*.025+(fiber-.5)*.012;
- float grain=paper;float reveal=smoothstep(grain*.6,grain*.6+.34,progress*1.1);reveal=max(reveal,f.g*.78);
- vec2 rough=vec2(grain-.5,fiber-.5)*1.5/resolution;float motif=(1.-texture2D(target,uv+rough).r)*reveal;
- float old=(1.-texture2D(previous,uv).r)*smoothstep(grain*.65,grain*.65+.32,previousFade);
- float granulation=noise(uv*resolution*.42);float pigment=max(0.,pow(f.r,.72)-grain*.18-granulation*.075);float wet=pigment*(mix(.95,.30,smoothstep(.55,1.,progress))+.22*f.b);float dry=.93+granulation*.07;
- float ink=1.-(1.-motif*.95*dry)*(1.-old*.94*dry)*(1.-wet);
- gl_FragColor=vec4(base*(1.-ink*.95),1.);
+ vec4 f=texture2D(field,uv);vec2 px=1./resolution;
+ float mask=1.-texture2D(target,uv).r;
+ float attached=mode<1.5?min(mask,f.g):f.g;
+ float liquid=clamp(f.r*.65+f.b*.95,0.,1.);
+ vec2 gradient=vec2(texture2D(field,uv+vec2(px.x*2.,0)).b-texture2D(field,uv-vec2(px.x*2.,0)).b,texture2D(field,uv+vec2(0,px.y*2.)).b-texture2D(field,uv-vec2(0,px.y*2.)).b);
+ float ripple=sin(uv.x*19.+uv.y*13.+time*.45+fbm(uv*4.+time*.015)*2.);
+ vec3 porcelain=vec3(.994,.996,.998)-.004*(1.-ripple);
+ vec3 dye=mix(vec3(.13,.19,.23),vec3(.018,.035,.055),smoothstep(.12,.8,liquid));
+ vec3 color=mix(porcelain,dye,1.-exp(-liquid*3.4));
+ float sheen=pow(max(0.,dot(normalize(vec3(-gradient*18.,1.)),normalize(vec3(-.5,.7,1.)))),22.);
+ color+=vec3(.19,.23,.25)*sheen*smoothstep(.08,.7,f.b)*.32;
+ color=mix(color,vec3(.025,.045,.06),clamp(attached*1.12,0.,1.));
+ gl_FragColor=vec4(color,1.);
 }`;
+const measure = `precision highp float; varying vec2 uv;uniform sampler2D field,target;
+void main(){vec4 f=texture2D(field,uv);float m=1.-texture2D(target,uv).r;gl_FragColor=vec4(min(m,f.g),m,max(f.r,f.b),1.);}`;
 
 type Surface = { texture: WebGLTexture; frame: WebGLFramebuffer };
 export class InkRenderer {
   private gl: WebGLRenderingContext;
   private flow: WebGLProgram;
   private render: WebGLProgram;
+  private measure: WebGLProgram;
+  private meter: Surface;
+  private readings = new Uint8Array(96*64*4);
   private fields: Surface[] = [];
   private targets: WebGLTexture[];
   private width = 1;
@@ -44,18 +72,19 @@ export class InkRenderer {
   private simulationHeight = 1;
   private vortices = new Float32Array(32);
   private vortex = 0;
-  private clearReveal = 0;
-  private rinsing = 0;
+
   private uniforms = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: true, powerPreference: 'low-power' });
     if (!gl) throw new Error('WebGL unavailable');
     this.gl = gl;
-    this.flow = this.program(flow); this.render = this.program(render);
+    this.flow = this.program(flow); this.render = this.program(render); this.measure = this.program(measure);
     const buffer = gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
-    for(const program of [this.flow,this.render]){gl.useProgram(program);const at=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(at);gl.vertexAttribPointer(at,2,gl.FLOAT,false,0,0);}
+    for(const program of [this.flow,this.render,this.measure]){gl.useProgram(program);const at=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(at);gl.vertexAttribPointer(at,2,gl.FLOAT,false,0,0);}
     this.targets = [this.texture(),this.texture()];
+    const texture=this.texture();gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,96,64,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    const frame=gl.createFramebuffer()!;gl.bindFramebuffer(gl.FRAMEBUFFER,frame);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);this.meter={texture,frame};
   }
   private program(fragment: string): WebGLProgram {
     const gl=this.gl;const program=gl.createProgram()!;
@@ -69,7 +98,7 @@ export class InkRenderer {
   private bind(program:WebGLProgram,name:string,texture:WebGLTexture,unit:number):void{const gl=this.gl;gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,texture);gl.uniform1i(this.location(program,name),unit);}
   resize(width:number,height:number):void{
     const gl=this.gl;this.width=width;this.height=height;this.canvas.width=width;this.canvas.height=height;
-    const scale=Math.min(1,640/Math.max(width,height));this.simulationWidth=Math.max(1,Math.round(width*scale));this.simulationHeight=Math.max(1,Math.round(height*scale));
+    const scale=Math.min(1,1100/Math.max(width,height));this.simulationWidth=Math.max(1,Math.round(width*scale));this.simulationHeight=Math.max(1,Math.round(height*scale));
     this.fields.forEach(s=>{gl.deleteTexture(s.texture);gl.deleteFramebuffer(s.frame);});this.fields=[];
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     for(let i=0;i<2;i++){const texture=this.texture();gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,this.simulationWidth,this.simulationHeight,0,gl.RGBA,gl.UNSIGNED_BYTE,null);const frame=gl.createFramebuffer()!;gl.bindFramebuffer(gl.FRAMEBUFFER,frame);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);this.fields.push({texture,frame});}
@@ -78,15 +107,22 @@ export class InkRenderer {
     const gl=this.gl;gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     [current,previous].forEach((source,i)=>{gl.bindTexture(gl.TEXTURE_2D,this.targets[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);});
   }
-  reset():void{const gl=this.gl;this.fields.forEach(s=>{gl.bindFramebuffer(gl.FRAMEBUFFER,s.frame);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);});this.vortices.fill(0);this.rinsing=0;}
-  next():void{this.clearReveal=1;this.rinsing=2;}
-  draw(time:number,dt:number,progress:number,previousFade:number,stroke:Stroke|null,reduced:boolean,present=true):void{
+  reset():void{const gl=this.gl;this.fields.forEach(s=>{gl.bindFramebuffer(gl.FRAMEBUFFER,s.frame);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);});this.vortices.fill(0);}
+  next():void{this.reset();}
+  coverage():{coverage:number;ink:number}{
+    const gl=this.gl,p=this.measure;gl.useProgram(p);gl.bindFramebuffer(gl.FRAMEBUFFER,this.meter.frame);gl.viewport(0,0,96,64);
+    this.bind(p,'field',this.fields[0].texture,0);this.bind(p,'target',this.targets[0],1);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    gl.readPixels(0,0,96,64,gl.RGBA,gl.UNSIGNED_BYTE,this.readings);
+    let attached=0,mask=0,ink=0;for(let i=0;i<this.readings.length;i+=4){attached+=this.readings[i];mask+=this.readings[i+1];ink+=this.readings[i+2];}
+    return {coverage:mask?attached/mask:0,ink:ink/(96*64*255)};
+  }
+  draw(time:number,dt:number,mode:number,_previousFade:number,stroke:Stroke|null,reduced:boolean,present=true):void{
     const gl=this.gl,p=this.flow;gl.useProgram(p);gl.bindFramebuffer(gl.FRAMEBUFFER,this.fields[1].frame);gl.viewport(0,0,this.simulationWidth,this.simulationHeight);this.bind(p,'field',this.fields[0].texture,0);
-    gl.uniform2f(this.location(p,'pixel'),1/this.simulationWidth,1/this.simulationHeight);gl.uniform1f(this.location(p,'aspect'),this.width/this.height);gl.uniform1f(this.location(p,'time'),time);gl.uniform1f(this.location(p,'dt'),reduced?0:dt);gl.uniform1f(this.location(p,'clearReveal'),this.clearReveal);this.clearReveal=0;this.rinsing=Math.max(0,this.rinsing-dt);gl.uniform1f(this.location(p,'rinse'),this.rinsing>0?Math.exp(-dt*1.8):1);
-    gl.uniform1f(this.location(p,'down'),stroke?1:0);gl.uniform1f(this.location(p,'radius'),stroke?.pressure??.04);
+    gl.uniform2f(this.location(p,'pixel'),1/this.simulationWidth,1/this.simulationHeight);gl.uniform1f(this.location(p,'aspect'),this.width/this.height);gl.uniform1f(this.location(p,'time'),time);gl.uniform1f(this.location(p,'dt'),dt*(reduced?.45:1));gl.uniform1f(this.location(p,'mode'),mode);this.bind(p,'target',this.targets[0],1);
+    gl.uniform1f(this.location(p,'down'),stroke&&mode===0?1:0);gl.uniform1f(this.location(p,'radius'),stroke?.pressure??.04);
     if(stroke){gl.uniform4f(this.location(p,'stroke'),stroke.px,1-stroke.py,stroke.x,1-stroke.y);const at=this.vortex++%8*4;this.vortices.set([stroke.x,1-stroke.y,this.vortex%2?1:-1,1],at);}
     for(let i=3;i<32;i+=4)this.vortices[i]*=Math.exp(-dt*.65);gl.uniform4fv(this.location(p,'vortices[0]'),this.vortices);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);this.fields.reverse();if(!present)return;
-    const r=this.render;gl.useProgram(r);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,this.width,this.height);this.bind(r,'field',this.fields[0].texture,0);this.bind(r,'target',this.targets[0],1);this.bind(r,'previous',this.targets[1],2);gl.uniform2f(this.location(r,'resolution'),this.width,this.height);gl.uniform1f(this.location(r,'progress'),progress);gl.uniform1f(this.location(r,'previousFade'),previousFade);gl.uniform1f(this.location(r,'time'),time);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    const r=this.render;gl.useProgram(r);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,this.width,this.height);this.bind(r,'field',this.fields[0].texture,0);this.bind(r,'target',this.targets[0],1);this.bind(r,'previous',this.targets[1],2);gl.uniform2f(this.location(r,'resolution'),this.width,this.height);gl.uniform1f(this.location(r,'mode'),mode);gl.uniform1f(this.location(r,'time'),time);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
-  destroy():void{const gl=this.gl;this.fields.forEach(s=>{gl.deleteTexture(s.texture);gl.deleteFramebuffer(s.frame);});this.targets.forEach(t=>gl.deleteTexture(t));gl.deleteProgram(this.flow);gl.deleteProgram(this.render);gl.getExtension('WEBGL_lose_context')?.loseContext();}
+  destroy():void{const gl=this.gl;this.fields.forEach(s=>{gl.deleteTexture(s.texture);gl.deleteFramebuffer(s.frame);});this.targets.forEach(t=>gl.deleteTexture(t));gl.deleteTexture(this.meter.texture);gl.deleteFramebuffer(this.meter.frame);gl.deleteProgram(this.measure);gl.deleteProgram(this.flow);gl.deleteProgram(this.render);gl.getExtension('WEBGL_lose_context')?.loseContext();}
 }
