@@ -88,9 +88,6 @@ body[data-experience='stamps'] button:focus-visible { outline:2px solid #8e393d;
 .tool-foot { position:absolute; bottom:0; left:0; width:100%; height:23%; border-radius:50% 50% 35% 35%; background:linear-gradient(100deg,#715222,#d5ad61 25%,#f4db9e 40%,#ad8039 80%,#5f441d); border-bottom:7px solid #634f2d; box-shadow:inset 0 3px 2px #e8d1a5; }
 .letter-press-tool:hover { filter:drop-shadow(10px 16px 10px #37261755); }
 .is-post-tool { left:8%; top:-12%; }
-.is-post-tool .tool-knob { background:linear-gradient(95deg,#1d1c19,#575348 35%,#282923 75%,#171914); }
-.is-post-tool .tool-stem { background:linear-gradient(90deg,#4c4d46,#b8b6a5 40%,#65665b 75%); }
-.is-post-tool .tool-foot { background:linear-gradient(100deg,#373832,#77796a 40%,#414238); border-color:#242620; box-shadow:inset 0 2px 2px #b7b8a5; }
 .letter-postmark { position:absolute; z-index:8; width:30%; height:auto; right:3%; top:23%; color:#666355c9; transform:rotate(-13deg); fill:none; stroke:currentColor; stroke-width:1.1; pointer-events:none; animation:postmark-strike .2s both; }
 .letter-postmark text { fill:currentColor; stroke:none; font:8px Georgia,serif; text-anchor:middle; letter-spacing:.3px; }
 .letter-postmark .postmark-love { font-size:10px; }

@@ -3,14 +3,14 @@ import { stampKinds, stampSVG, type StampKind } from './letters/stamp-art';
 import { incoming, reply } from './letters/content';
 import { saveEnvelope } from './letters/export';
 
-type Phase = 'sealed'|'opening'|'open'|'reading'|'reply'|'folding'|'stamp'|'seal'|'postmark'|'done';
+type Phase = 'address'|'sealed'|'opening'|'open'|'reading'|'reply'|'folding'|'stamp'|'seal'|'postmark'|'done';
 const icons={reset:'<path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/>',flip:'<path d="m8 3-5 5 5 5M3 8h10a7 7 0 1 1 0 14"/>',save:'<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>'};
 const icon=(name:keyof typeof icons)=>`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">${icons[name]}</svg>`;
 const seal='<img src="/letters/wax-h.png" alt="" draggable="false">';
 const postmark=()=>`<svg class="letter-postmark" viewBox="0 0 240 130" aria-hidden="true"><circle cx="66" cy="65" r="57"/><circle cx="66" cy="65" r="50"/><text x="66" y="40">BIRTHDAY MAIL</text><text class="postmark-love" x="66" y="73">WITH LOVE</text><path d="M39 91h54"/>${[33,47,61,75,89].map(y=>`<path d="M114 ${y}q22-12 44 0t44 0t34 0"/>`).join('')}</svg>`;
 
-function envelope(back:boolean,opened=false,stamped:StampKind|null=null,waxed=false,marked=false):string {
-  return `<div class="letter-envelope ${back?'is-back':'is-front'} ${opened?'is-open':''}"><div class="envelope-base"></div>${back?`<div class="envelope-lining"></div>${opened?'<button type="button" class="letter-slip" data-action="read" aria-label="Pull out the letter"><span>Dear Hikaru,</span></button>':''}<div class="envelope-side envelope-side-left"></div><div class="envelope-side envelope-side-right"></div><div class="envelope-bottom"></div><div class="envelope-flap"></div><span class="envelope-note">${waxed?'Hikaru.':'Hikaru.'}</span><span class="envelope-from">${waxed?'with love':'with love, a wolfie'}</span>${waxed?`<div class="wax-target">${seal}</div>`:''}`:`<span class="envelope-sender">Hikaru.</span><span class="envelope-recipient">To a wolfie</span><div class="letter-stamp-slot ${stamped?'is-filled':''}" aria-label="Postage stamp position">${stamped?stampSVG(stamped,'envelope'):''}</div>${marked?postmark():''}`}</div>`;
+function envelope(back:boolean,opened=false,stamped:StampKind|null=null,waxed=false,marked=false,inbound=false):string {
+  return `<div class="letter-envelope ${back?'is-back':'is-front'} ${opened?'is-open':''}"><div class="envelope-base"></div>${back?`<div class="envelope-lining"></div>${opened?'<button type="button" class="letter-slip" data-action="read" aria-label="Pull out the letter"><span>Dear Hikaru,</span></button>':''}<div class="envelope-side envelope-side-left"></div><div class="envelope-side envelope-side-right"></div><div class="envelope-bottom"></div><div class="envelope-flap"></div><span class="envelope-note">${waxed?'Hikaru.':'Hikaru.'}</span><span class="envelope-from">${waxed?'with love':'with love, a wolfie'}</span>${waxed?`<div class="wax-target">${seal}</div>`:''}`:`<span class="envelope-sender">${inbound?'From a wolfie':'From Hikaru'}</span><span class="envelope-recipient">${inbound?'To Hikaru':'To a wolfie'}</span><div class="letter-stamp-slot ${stamped?'is-filled':''}" aria-label="Postage stamp position">${stamped?stampSVG(stamped,'envelope'):''}</div>${marked?postmark():''}`}</div>`;
 }
 function sheet(isReply:boolean):string {
   const letter=isReply?reply:incoming;
@@ -28,7 +28,7 @@ export function mountStamps(root:HTMLElement):()=>void {
   const status=root.querySelector<HTMLElement>('.letter-status')!;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const timers=new Set<number>();
-  let phase:Phase='sealed',chosen:StampKind|null=null,busy=false,back=false,viewing=false,destroyed=false;
+  let phase:Phase='address',chosen:StampKind|null=null,busy=false,back=false,viewing=false,destroyed=false;
   let ghost:HTMLElement|null=null,drag:StampKind|null=null,pointer=-1,moved=false,suppress=false;
   let start={x:0,y:0};
   const later=(callback:()=>void,delay:number)=>{const id=window.setTimeout(()=>{timers.delete(id);if(!destroyed)callback();},reduced.matches?30:delay);timers.add(id);};
@@ -36,7 +36,10 @@ export function mountStamps(root:HTMLElement):()=>void {
 
   function render(focus=true):void {
     page.dataset.phase=phase;page.classList.toggle('is-viewing',viewing);
-    if(phase==='sealed'||phase==='opening'||phase==='open'){
+    if(phase==='address'){
+      stage.innerHTML=envelope(false,false,'wolf',false,true,true);
+      actions.innerHTML=action('Turn over','turn');
+    }else if(phase==='sealed'||phase==='opening'||phase==='open'){
       stage.innerHTML=envelope(true,phase!=='sealed')+(phase!=='open'?`<button class="incoming-wax ${phase==='opening'?'is-broken':''}" data-action="open" aria-label="Break the wax seal" ${busy?'disabled':''}><span class="seal-half seal-left">${seal}</span><span class="seal-half seal-right">${seal}</span></button>`:'');
       actions.innerHTML=action(phase==='open'?'Read':'Open',phase==='open'?'read':'open',busy);
     }else if(phase==='reading'||phase==='reply'||phase==='folding'||viewing){
@@ -82,6 +85,7 @@ export function mountStamps(root:HTMLElement):()=>void {
   }
   async function perform(name:string):Promise<void>{
     if(busy)return;
+    if(name==='turn'&&phase==='address'){busy=true;stage.classList.add('turning');later(()=>{stage.classList.remove('turning');change('sealed');},380);}
     if(name==='open')open();
     if(name==='read'&&phase==='open'){status.textContent='A birthday letter for Hikaru.';change('reading');}
     if(name==='reply'&&phase==='reading'){status.textContent='A preset reply to a wolfie.';change('reply');}
@@ -118,7 +122,7 @@ export function mountStamps(root:HTMLElement):()=>void {
     if(kind&&(dropped||clicked))place(kind);
   });
   stage.addEventListener('pointercancel',cleanDrag);stage.addEventListener('lostpointercapture',()=>{if(pointer!==-1)cleanDrag();});
-  root.querySelector('.letter-reset')!.addEventListener('click',()=>{timers.forEach(clearTimeout);timers.clear();cleanDrag();phase='sealed';chosen=null;busy=false;viewing=false;back=false;suppress=false;stage.classList.remove('turning');status.textContent='A letter for Hikaru.';render();});
+  root.querySelector('.letter-reset')!.addEventListener('click',()=>{timers.forEach(clearTimeout);timers.clear();cleanDrag();phase='address';chosen=null;busy=false;viewing=false;back=false;suppress=false;stage.classList.remove('turning');status.textContent='A letter for Hikaru.';render();});
   render(false);
   return ()=>{destroyed=true;timers.forEach(clearTimeout);cleanDrag();};
 }
