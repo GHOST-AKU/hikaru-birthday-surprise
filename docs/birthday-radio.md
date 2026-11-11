@@ -32,3 +32,7 @@ Changing the news language fades out and restarts the corresponding broadcast. C
 ## Validation scope
 
 Production build runs TypeScript checking and Vite bundling. No automated tests were added or run. Browser interaction, responsive rendering and real-device listening have not been verified in this update.
+
+## Shenandoah revision
+
+Rhythm now follows Paul Hardy’s consistent 4/4 transcription (80 BPM), transposed from G to D: https://www.folktunefinder.com/tunes/51319 . Tied notes remain continuous; the two eighth-note breath rests are explicit (MIDI 0 means rest). The ending remains through “cross the wide Missouri.” This replaces the previous mixed-meter transcription. River timbre uses a clear upper-register flute-like sine spectrum, 25 ms attack, sustained body, short release, quieter bass, and three low-level stereo echoes at 225/450/675 ms. No environmental recording is mixed in. Browser listening has not been verified in this revision.
