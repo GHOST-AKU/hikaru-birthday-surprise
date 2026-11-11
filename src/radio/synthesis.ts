@@ -48,12 +48,32 @@ export async function renderMusic(channel: Channel): Promise<AudioBuffer> {
   return context.startRendering();
 }
 export async function renderNews(voice: AudioBuffer): Promise<AudioBuffer> {
-  const context = new OfflineAudioContext(1, Math.ceil((voice.duration + 6.3) * rate), rate);
-  const mix = space(context);
-  [72,76,79].forEach((pitch, index) => tone(context, mix, pitch, .12 + index * .17, .35, .12, 'bell'));
+  const voiceStart = 3.05;
+  const voiceEnd = voiceStart + voice.duration;
+  const context = new OfflineAudioContext(1, Math.ceil((voiceEnd + 4.8) * rate), rate);
+  const intro = context.createGain();
+  intro.gain.setValueAtTime(1, 0);
+  intro.gain.setValueAtTime(1, 2.35);
+  intro.gain.linearRampToValueAtTime(0, voiceStart - .18);
+  intro.connect(space(context));
+  const motif = [[67,.5],[72,.5],[74,.5],[76,1],[74,.5],[72,1]] as const;
+  let cursor = .14;
+  motif.forEach(([pitch, beats], index) => {
+    tone(context, intro, pitch, cursor, beats * .46, index === 3 ? .105 : .085, 'bell');
+    cursor += beats * .46;
+  });
+  tone(context, intro, 48, .14, 1.3, .045, 'bass');
+  tone(context, intro, 55, .83, .6, .03, 'bass');
+  [48,60,64,71].forEach((pitch, index) => {
+    tone(context, intro, pitch, 1.52 + index * .025, 1, index === 0 ? .038 : .018, 'air');
+  });
   const source = context.createBufferSource(); source.buffer = voice;
   const level = context.createGain(); level.gain.value = .82;
-  source.connect(level).connect(context.destination); source.start(1.1);
-  [48,55].forEach(pitch => tone(context, mix, pitch, voice.duration + 2, 2.5, .04, 'air'));
+  source.connect(level).connect(context.destination); source.start(voiceStart);
+  const outro = space(context);
+  [67,64,60].forEach((pitch, index) => {
+    tone(context, outro, pitch, voiceEnd + .42 + index * .3, .5, .045, 'pluck');
+  });
+  [48,55].forEach(pitch => tone(context, outro, pitch, voiceEnd + .42, 1.8, .025, 'air'));
   return context.startRendering();
 }

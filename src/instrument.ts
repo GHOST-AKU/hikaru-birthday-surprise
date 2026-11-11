@@ -6,6 +6,7 @@ import { channels, frequencyAt, reception } from './radio/channels';
 import { downloadTicket, ticketLabel, receiptSVG, type Language, type Ticket } from './receipt';
 
 const printIcon = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M8 12V4h16v8M8 24H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h24a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4"/><path d="M8 20h16v10H8zM12 24h8"/><circle cx="25" cy="15" r="1" fill="currentColor" stroke="none"/></svg>`;
+const scissorsIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5.5" cy="6" r="2.6"/><circle cx="5.5" cy="18" r="2.6"/><path d="m7.7 7.4 13 12M7.7 16.6 20.7 4.5"/><circle cx="12.5" cy="12" r=".8" fill="currentColor" stroke="none"/></svg>`;
 const downloadIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4"/></svg>`;
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -49,6 +50,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="printer-slot" aria-hidden="true"></div>
       </div>
       <div class="receipt-mount" aria-hidden="true">
+        <button class="snip-button" type="button" aria-label="Snip off ticket" hidden>${scissorsIcon}<span>snip</span></button>
         <div class="paper" role="button" tabindex="-1" aria-label="Tear off birthday ticket"></div>
         <button class="download-button" type="button" aria-label="Save birthday ticket" hidden>${downloadIcon}</button>
       </div>
@@ -73,6 +75,7 @@ const lockLight = element('.lock-light');
 const tunerNeedle = element('#tuner-needle');
 const printButton = element<HTMLButtonElement>('.print-button');
 const saveButton = element<HTMLButtonElement>('.download-button');
+const snipButton = element<HTMLButtonElement>('.snip-button');
 const languageSwitch = element('.language-switch');
 const status = element('#status');
 let language: Language = 'en';
@@ -142,6 +145,7 @@ printButton.addEventListener('click', async () => {
   printButton.setAttribute('aria-busy', 'true');
   saveButton.hidden = true;
   saveButton.disabled = true;
+  snipButton.hidden = true;
   paper.tabIndex = -1;
   mount.setAttribute('aria-hidden', 'true');
   status.textContent = '';
@@ -176,12 +180,16 @@ printButton.addEventListener('click', async () => {
   saveButton.setAttribute('aria-label', ticket.language === 'zh' ? '儲存生日紙票' : 'Save birthday ticket');
   status.textContent = ticketLabel(ticket);
   printing = false;
+  snipButton.hidden = false;
+  snipButton.setAttribute('aria-label', ticket.language === 'zh' ? '剪下小票' : 'Snip off ticket');
+  snipButton.querySelector('span')!.textContent = ticket.language === 'zh' ? '剪下' : 'snip';
   updateTuner(dial.current);
 });
 
 function detach(): void {
   if (detached || printing || !ticket) return;
   detached = true;
+  snipButton.hidden = true;
   paper.classList.remove('is-dragging');
   paper.style.removeProperty('--pull');
   paper.style.removeProperty('--tilt');
@@ -190,6 +198,8 @@ function detach(): void {
   audio.tear();
   saveButton.focus({ preventScroll: true });
 }
+
+snipButton.addEventListener('click', detach);
 
 paper.addEventListener('pointerdown', event => {
   if (printing || detached || !ticket || event.button !== 0) return;

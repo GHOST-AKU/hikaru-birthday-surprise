@@ -31,8 +31,9 @@ function spring(language: Language): string {
     const y = 130 + row * 7.5;
     return `<path d="M25 ${y} C85 ${y-45-row} 155 ${y+53-row} 260 ${y-10}"/>`;
   }).join('');
-  const petals = notes.map(([pitch],i) => {
-    const x = 36+i*16.5; const y = 185 - (pitch-55)*5 + Math.sin(i)*10;
+  const petalNotes = Array.from({length:15}, (_,i) => notes[Math.round(i * (notes.length - 1) / 14)]);
+  const petals = petalNotes.map(([pitch],i) => {
+    const x = 36+i*16; const y = 185 - (pitch-55)*5 + Math.sin(i)*10;
     return `<ellipse cx="${x}" cy="${y}" rx="2" ry="5" transform="rotate(${i*37} ${x} ${y})"/>`;
   }).join('');
   return `${text('望春風',150,105,49,`${centered} font-family="serif" letter-spacing="10"`)}

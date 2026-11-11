@@ -371,3 +371,17 @@ h1 {
 .dial { top: 6cqw; }
 .dial-labels { top: 46.5cqw; left: 7cqw; right: 7cqw; font-size: 2.4cqw; letter-spacing: .4cqw; }
 .print-button:disabled:not([aria-busy='true']) { opacity: .55; cursor: default; transform: none; }
+
+.snip-button {
+  position: absolute; z-index: 2; top: calc(1.8cqw - 22px); right: calc(100% + 3px);
+  min-width: 44px; height: 44px; padding: 5px 3px; border: 0; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: #73776b; background: transparent; transition: color .2s;
+}
+.snip-button svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; transform: rotate(-12deg); transition: transform .2s; }
+.snip-button span { font-size: 10px; line-height: 1; letter-spacing: .4px; }
+.snip-button::after { content: ''; position: absolute; right: -3px; top: 22px; width: 7px; border-top: 1px dashed #9a9d90; }
+.snip-button:hover { color: #3d4936; }
+.snip-button:hover svg { transform: rotate(0); }
+.snip-button:focus-visible { outline-color: #768467; outline-offset: 1px; }
+.is-clearing .snip-button { visibility: hidden; }
