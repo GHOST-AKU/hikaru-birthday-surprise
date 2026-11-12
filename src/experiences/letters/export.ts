@@ -1,3 +1,4 @@
+import { assetPath } from '../../assets';
 import { stampSVG, type StampKind } from './stamp-art';
 
 export async function saveEnvelope(kind: StampKind, back: boolean): Promise<void> {
@@ -9,10 +10,10 @@ export async function saveEnvelope(kind: StampKind, back: boolean): Promise<void
   if(back){
     c.strokeStyle='#d2c4ac';c.lineWidth=2;c.beginPath();c.moveTo(100,900);c.lineTo(800,400);c.lineTo(1500,900);c.stroke();
     c.fillStyle='#f8efde';c.beginPath();c.moveTo(100,100);c.lineTo(800,560);c.lineTo(1500,100);c.closePath();c.fill();c.stroke();
-    const seal=await load('/letters/wax-h.png');c.drawImage(seal,690,450,220,220);
+    const seal=await load(assetPath('letters/wax-h.png'));c.drawImage(seal,690,450,220,220);
   }else{
     c.fillStyle='#734b39';c.font='italic 52px Georgia,serif';c.fillText('Hikaru.',180,240);c.font='italic 96px Georgia,serif';c.textAlign='center';c.fillText('To a wolfie',800,555);
-    let wolf='/stamps-wolf.webp';
+    let wolf=assetPath('stamps-wolf.webp');
     if(kind==='wolf'){
       const response=await fetch(wolf);if(!response.ok)throw new Error('Artwork unavailable');const blob=await response.blob();
       wolf=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(blob);});

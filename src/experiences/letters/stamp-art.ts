@@ -1,3 +1,4 @@
+import { assetPath } from '../../assets';
 
 export type StampKind = 'comfy' | 'wolf' | 'play';
 export const stampKinds: StampKind[] = ['comfy', 'wolf', 'play'];
@@ -21,7 +22,7 @@ function playArt(): string {
   return `<g fill="#434b75">${squares}</g><circle cx="100" cy="100" r="79" fill="#f5f0df"/><g fill="none" stroke="#434b75" stroke-width="1.2">${circles}</g><path d="M100 18C100 78 122 100 182 100C122 100 100 122 100 182C100 122 78 100 18 100C78 100 100 78 100 18Z" fill="#f5f0df" stroke="#434b75" stroke-width=".8"/><path d="M100 38C100 83 117 100 162 100C117 100 100 117 100 162C100 117 83 100 38 100C83 100 100 83 100 38Z" fill="none" stroke="#434b75" stroke-width=".7"/>`;
 }
 
-export function stampSVG(kind: StampKind, suffix: string, wolfHref = '/stamps-wolf.webp'): string {
+export function stampSVG(kind: StampKind, suffix: string, wolfHref = assetPath('stamps-wolf.webp')): string {
   const holes = [...Array.from({length:18},(_,i)=>`<circle cx="${i*14}" cy="0" r="4.4"/><circle cx="${i*14}" cy="300" r="4.4"/>`), ...Array.from({length:22},(_,i)=>`<circle cx="0" cy="${i*14}" r="4.4"/><circle cx="240" cy="${i*14}" r="4.4"/>`)].join('');
   const art = kind === 'comfy' ? comfyArt() : kind === 'play' ? playArt() : `<image href="${wolfHref}" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" aria-hidden="true"><defs><mask id="stamp-cut-${suffix}"><rect width="240" height="300" fill="white"/><g fill="black">${holes}</g></mask><clipPath id="stamp-art-${suffix}"><rect width="200" height="200"/></clipPath></defs><g mask="url(#stamp-cut-${suffix})"><rect width="240" height="300" fill="#fbf7ec"/><rect x="15" y="15" width="210" height="270" fill="none" stroke="${colors[kind]}" stroke-width=".9"/><text x="120" y="38" fill="${colors[kind]}" font-family="Georgia,serif" font-weight="bold" font-size="17" letter-spacing="4.5" text-anchor="middle">HIKARU</text><path d="M15 47H225M15 251H225" stroke="${colors[kind]}" stroke-width=".9"/><g transform="translate(20 49)" clip-path="url(#stamp-art-${suffix})"><rect width="200" height="200" fill="#f5f0df"/>${art}</g><text x="120" y="275" fill="${colors[kind]}" font-family="Georgia,serif" font-size="17" font-weight="bold" letter-spacing="3.2" text-anchor="middle">${kind.toUpperCase()}</text><path d="M24 266h28m-28 4h28m-28 4h28M188 266h28m-28 4h28m-28 4h28" stroke="${colors[kind]}" stroke-width=".65"/></g></svg>`;

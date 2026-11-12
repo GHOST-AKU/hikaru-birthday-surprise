@@ -1,5 +1,6 @@
 import { channels, reception, type Channel, type Language } from './radio/channels';
 import { renderMusic, renderNews } from './radio/synthesis';
+import { assetPath } from './assets';
 
 export class InstrumentAudio {
   private context?: AudioContext;
@@ -97,7 +98,7 @@ export class InstrumentAudio {
     const existing = this.buffers.get(key);
     if (existing) return existing;
     const task = channel.id === 'news'
-      ? fetch(`/radio/${key}.mp3`).then(response => {
+      ? fetch(assetPath(`radio/${key}.mp3`)).then(response => {
         if (!response.ok) throw new Error('Broadcast unavailable');
         return response.arrayBuffer();
       }).then(data => this.context!.decodeAudioData(data)).then(renderNews)

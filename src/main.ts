@@ -1,4 +1,5 @@
 import './navigation.css';
+import { assetPath } from './assets';
 
 const experiences = [
   { path: '/instrument', name: '仪器', en: 'PRESS' },
@@ -7,14 +8,16 @@ const experiences = [
   { path: '/sound', name: '声音', en: 'PLAY' }
 ];
 
-const requestedPath = location.pathname.replace(/\/+$/, '') || '/instrument';
+const basePrefix = import.meta.env.BASE_URL.replace(/\/$/, '');
+const sitePath = location.pathname.startsWith(basePrefix + '/') ? location.pathname.slice(basePrefix.length) : location.pathname;
+const requestedPath = sitePath.replace(/\/+$/, '') || '/';
 const path = requestedPath === '/cover' ? '/ink' : requestedPath;
-if(requestedPath === '/cover') history.replaceState(null,'','/ink'+location.search+location.hash);
+if(requestedPath === '/cover') history.replaceState(null,'',assetPath('ink/')+location.search+location.hash);
 const current = experiences.find(item => item.path === path);
 const root = document.querySelector<HTMLElement>('#app')!;
 
 if (!current) {
-  location.replace('/instrument');
+  location.replace(assetPath('instrument/'));
 } else {
   document.title = `HIKARU — ${current.en}`;
   document.body.dataset.experience = current.path.slice(1);
@@ -22,7 +25,7 @@ if (!current) {
   const navigation = document.createElement('nav');
   navigation.className = 'experience-nav';
   navigation.setAttribute('aria-label', 'Experiences');
-  navigation.innerHTML = `<button type="button" class="experience-nav-toggle" aria-label="切换作品" aria-expanded="false" aria-controls="experience-links"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="5" height="5" rx=".7"/><rect x="15" y="4" width="5" height="5" rx=".7"/><rect x="4" y="15" width="5" height="5" rx=".7"/><rect x="15" y="15" width="5" height="5" rx=".7"/></svg></button><div id="experience-links" class="experience-links" hidden>${experiences.map(item => `<a href="${item.path}"${item === current ? ' aria-current="page"' : ''}><span>${item.name}</span><span>${item.en}</span></a>`).join('')}</div>`;
+  navigation.innerHTML = `<button type="button" class="experience-nav-toggle" aria-label="切换作品" aria-expanded="false" aria-controls="experience-links"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="5" height="5" rx=".7"/><rect x="15" y="4" width="5" height="5" rx=".7"/><rect x="4" y="15" width="5" height="5" rx=".7"/><rect x="15" y="15" width="5" height="5" rx=".7"/></svg></button><div id="experience-links" class="experience-links" hidden>${experiences.map(item => `<a href="${assetPath(item.path)}"${item === current ? ' aria-current="page"' : ''}><span>${item.name}</span><span>${item.en}</span></a>`).join('')}</div>`;
   document.body.append(navigation);
   const toggle = navigation.querySelector<HTMLButtonElement>('button')!;
   const links = navigation.querySelector<HTMLElement>('.experience-links')!;

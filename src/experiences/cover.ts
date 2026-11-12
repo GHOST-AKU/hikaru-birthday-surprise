@@ -1,7 +1,8 @@
 import './cover.css';
 import { InkRenderer, type Stroke } from './cover/ink';
+import { assetPath } from '../assets';
 
-const ART = ['/ink/wolf-calligraphy.jpg', '/ink/hikaru-portrait.jpg'];
+const ART = [assetPath('ink/wolf-calligraphy.jpg'), assetPath('ink/hikaru-portrait.jpg')];
 const NAMES = ['HIKARU', 'Happy birthday', '狼', 'Hikaru portrait'];
 
 export function mountCover(root: HTMLElement): () => void {

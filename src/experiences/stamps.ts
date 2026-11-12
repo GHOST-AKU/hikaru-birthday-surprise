@@ -2,11 +2,12 @@ import './stamps.css';
 import { stampKinds, stampSVG, type StampKind } from './letters/stamp-art';
 import { incoming, reply } from './letters/content';
 import { saveEnvelope } from './letters/export';
+import { assetPath } from '../assets';
 
 type Phase = 'address'|'sealed'|'opening'|'open'|'reading'|'reply'|'folding'|'stamp'|'seal'|'postmark'|'done';
 const icons={reset:'<path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/>',flip:'<path d="m8 3-5 5 5 5M3 8h10a7 7 0 1 1 0 14"/>',save:'<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>'};
 const icon=(name:keyof typeof icons)=>`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">${icons[name]}</svg>`;
-const seal='<img src="/letters/wax-h.png" alt="" draggable="false">';
+const seal=`<img src="${assetPath('letters/wax-h.png')}" alt="" draggable="false">`;
 const postmark=()=>`<svg class="letter-postmark" viewBox="0 0 240 130" aria-hidden="true"><circle cx="66" cy="65" r="57"/><circle cx="66" cy="65" r="50"/><text x="66" y="40">BIRTHDAY MAIL</text><text class="postmark-love" x="66" y="73">WITH LOVE</text><path d="M39 91h54"/>${[33,47,61,75,89].map(y=>`<path d="M114 ${y}q22-12 44 0t44 0t34 0"/>`).join('')}</svg>`;
 
 function envelope(back:boolean,opened=false,stamped:StampKind|null=null,waxed=false,marked=false,inbound=false):string {
