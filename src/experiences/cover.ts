@@ -1,11 +1,11 @@
 import './cover.css';
 import { InkRenderer, type Stroke } from './cover/ink';
 
-const ART = ['/ink/calligraphy-placeholder.png', '/ink/portrait-placeholder.png'];
-const NAMES = ['HIKARU', 'Happy birthday', 'Calligraphy', 'Portrait'];
+const ART = ['/ink/wolf-calligraphy.jpg', '/ink/hikaru-portrait.jpg'];
+const NAMES = ['HIKARU', 'Happy birthday', '狼', 'Hikaru portrait'];
 
 export function mountCover(root: HTMLElement): () => void {
-  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru — Inkflow"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Press to release ink; drag to guide the current. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button><button class="cover-tool cover-gift" type="button" aria-label="放水，打开下一份礼物" title="放水 · 下一份" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C3 9 5 2 8 4c2 1 4 5 4 5Zm0 0c9 0 7-7 4-5-2 1-4 5-4 5Z"/></svg><span>下一份</span></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
+  root.innerHTML = `<section class="cover-experience" aria-label="Hikaru — Inkflow"><canvas class="cover-canvas" tabindex="0" role="img" aria-label="Paint to reveal HIKARU, Happy birthday, calligraphy and a portrait. Press to release ink; drag to guide the current. Arrow keys paint, R resets."></canvas><div class="cover-tools"><button class="cover-tool cover-reset" type="button" aria-label="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9a8 8 0 1 0 0 7M20 3v6h-6"/></svg></button><button class="cover-tool cover-save" type="button" aria-label="Save painting as PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button><button class="cover-tool cover-gift" type="button" aria-label="Wash the ink and reveal the next artwork" title="Wash the ink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C3 9 5 2 8 4c2 1 4 5 4 5Zm0 0c9 0 7-7 4-5-2 1-4 5-4 5Z"/></svg><span>Wash the ink</span></button></div><div class="cover-chapters" aria-hidden="true">${NAMES.map(()=>'<span></span>').join('')}</div><div class="cover-status" role="status" aria-live="polite"></div></section>`;
   const canvas=root.querySelector<HTMLCanvasElement>('canvas')!;
   const status=root.querySelector<HTMLElement>('.cover-status')!;
   const dots=[...root.querySelectorAll('.cover-chapters span')];
@@ -15,7 +15,7 @@ export function mountCover(root: HTMLElement): () => void {
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const targets=Array.from({length:4},()=>document.createElement('canvas'));
   const blank=document.createElement('canvas');
-  const images: (HTMLImageElement|null)[]=[null,null];
+  const images: (HTMLCanvasElement|null)[]=[null,null];
   let engine:InkRenderer;
   try { engine=new InkRenderer(canvas); } catch { status.textContent='This browser could not start the ink canvas. Try a browser with WebGL 2 enabled.'; status.classList.add('is-error'); canvas.setAttribute('aria-label',status.textContent);return ()=>{}; }
   let stage=0,progress=0,mode=0,phaseTime=0,clock=0,lastMeasure=0;
@@ -36,13 +36,7 @@ export function mountCover(root: HTMLElement): () => void {
         c.font=`700 ${font}px Georgia, 'Times New Roman', serif`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#131510';c.fillText(text,width*.5,height*.5);
       }else if(images[i-2]){
         const image=images[i-2]!;const scale=Math.min(width*.84/image.width,height*.78/image.height);const w=image.width*scale,h=image.height*scale;c.drawImage(image,(width-w)/2,(height-h)/2,w,h);
-        const pixels=c.getImageData(0,0,width,height);
-        for(let n=0;n<pixels.data.length;n+=4){
-          const light=(pixels.data[n]*.2126+pixels.data[n+1]*.7152+pixels.data[n+2]*.0722)/255;
-          const value=Math.round(255*(1-Math.max(0,Math.min(1,(1-light-.1)/.85))));
-          pixels.data[n]=pixels.data[n+1]=pixels.data[n+2]=value;
-        }
-        c.putImageData(pixels,0,0);
+
       }
     });
     engine.setTargets(targets[stage],blank);
@@ -111,7 +105,21 @@ export function mountCover(root: HTMLElement): () => void {
   root.querySelector('.cover-reset')!.addEventListener('click',reset);
   canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);canvas.addEventListener('lostpointercapture',up);canvas.addEventListener('keydown',key);
   const observer=new ResizeObserver(resize);observer.observe(canvas);resize();updateChapter();frame=requestAnimationFrame(animate);
-  ART.forEach((src,i)=>{const image=new Image();image.onload=()=>{if(disposed)return;images[i]=image;buildTargets();};image.onerror=()=>{status.textContent='Artwork could not load. Reload to try again.';};image.src=src;});
+  ART.forEach((src,i)=>{const image=new Image();image.onload=()=>{if(disposed)return;const prepared=document.createElement('canvas');prepared.width=image.naturalWidth;prepared.height=image.naturalHeight;
+    const context=prepared.getContext('2d')!;context.drawImage(image,0,0);
+    const pixels=context.getImageData(0,0,prepared.width,prepared.height);
+    for(let n=0;n<pixels.data.length;n+=4){
+      const light=(pixels.data[n]*.2126+pixels.data[n+1]*.7152+pixels.data[n+2]*.0722)/255;
+      let pigment=i===0?Math.max(0,(light-.025)/.975):Math.pow(Math.max(0,Math.min(1,(.88-light)/.73)),.85);
+      if(i===1){
+        const x=(n/4)%prepared.width,y=Math.floor(n/4/prepared.width);
+        const edge=Math.min(x,y,prepared.width-1-x,prepared.height-1-y);
+        pigment*=Math.min(1,edge/12);
+      }
+      const value=Math.round(255*(1-Math.min(1,pigment)));
+      pixels.data[n]=pixels.data[n+1]=pixels.data[n+2]=value;pixels.data[n+3]=255;
+    }
+    context.putImageData(pixels,0,0);images[i]=prepared;buildTargets();};image.onerror=()=>{status.textContent='Artwork could not load. Reload to try again.';};image.src=src;});
   document.addEventListener('visibilitychange',visibility);window.addEventListener('pagehide',pause);window.addEventListener('pageshow',visibility);
   return ()=>{disposed=true;cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',pause);window.removeEventListener('pageshow',visibility);engine.destroy();};
 }
